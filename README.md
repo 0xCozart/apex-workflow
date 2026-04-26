@@ -1,33 +1,46 @@
 # Apex Workflow
 
-Configurable agent workflow kernel extracted from the Minty execution system.
+Apex Workflow is a configurable harness for Codex and LLM coding agents that turns "work on this repo" into a disciplined loop: orient, choose scope, record a slice, route through contracts, verify, and hand off cleanly. It gives every app its own workflow profile, so an agent can adapt to your tracker, GitNexus/MCP setup, browser tooling, design rules, and test commands without hard-coding one company's process.
 
-This repo is intentionally a reusable overlay, not a copy of Minty policy. The
-core skill is `apex-workflow`; app-specific behavior comes from a workflow
-profile such as `profiles/minty.workflow.json`.
+## What It Is
 
-## Contents
+Apex is not another prompt dump. It is an installable repo harness that writes an `apex.workflow.json` profile into the target app, adds an agent-facing `AGENTS.md` block, installs the `$apex-workflow` skill, and gives future agents a manifest-driven way to do real engineering work without rediscovering the repo every session.
 
-- `AGENTS.md`: agent-facing install rules for this harness repo.
-- `skills/apex-workflow/`: installable Codex skill.
-- `profiles/minty.workflow.json`: first extracted Minty profile.
-- `schemas/apex.workflow.schema.json`: profile schema.
-- `templates/apex.workflow.json`: blank profile starter.
-- `scripts/init-harness.mjs`: harness installer for target app repos.
-- `scripts/check-config.mjs`: profile validation with optional target-path checks.
-- `scripts/apex-manifest.mjs`: generic slice manifest helper.
-- `docs/adoption.md`: how to adopt the repo in another app.
-- `docs/extraction-map.md`: what was extracted from Minty and where it landed.
+## The Point
 
-## Harness Install
+Most coding agents fail in the same places:
 
-From this repo, configure a target app repo with:
+- they search before they understand the repo's authority chain
+- they edit shared code as if it were local code
+- they lose track of what files belong to the current slice
+- they claim broad verification from narrow evidence
+- they create tracker noise or skip tracker state entirely
+- they forget what happened when a session resumes
 
-```bash
-npm run init -- --target=/path/to/app
+Apex makes those failure modes explicit and configurable.
+
+## Install Flow
+
+```mermaid
+flowchart TD
+  A[User asks agent to install Apex] --> B[Agent opens apex-workflow repo]
+  B --> C{Config mode?}
+  C -->|Auto| D[Infer docs, scripts, contracts, browser, code intelligence]
+  C -->|Custom| E[Ask for tracker, GitNexus, browser choices]
+  D --> F[Write apex.workflow.json]
+  E --> F
+  F --> G[Add managed AGENTS.md block]
+  G --> H[Link $apex-workflow skill]
+  H --> I[Validate profile against target repo]
 ```
 
-For agent-driven non-interactive installs, pass the choices explicitly:
+From this repo:
+
+```bash
+npm run init -- --target=/path/to/app --config-mode=auto --yes
+```
+
+For custom agent-driven setup:
 
 ```bash
 npm run init -- \
@@ -42,19 +55,63 @@ npm run init -- \
   --yes
 ```
 
-The installer:
+## Execution Loop
 
-- writes `apex.workflow.json` in the target repo
-- creates or updates a managed Apex block in the target `AGENTS.md`
-- validates the generated profile against the target paths
-- symlinks `skills/apex-workflow` into the local Codex skills directory
+```mermaid
+flowchart LR
+  A[Task] --> B[Read app profile]
+  B --> C[Choose lightest safe mode]
+  C --> D[Create slice manifest]
+  D --> E[Read owner docs and contracts]
+  E --> F[Use MCP, GitNexus, or source search]
+  F --> G[Edit owned files only]
+  G --> H[Run focused checks]
+  H --> I[Detect changed scope]
+  I --> J[Finish packet and next safe slice]
+```
 
-Installer behavior:
+The manifest is the spine. It records the issue/tracker disposition, mode, owned files, no-touch surfaces, contracts read, code-intelligence checks, browser expectation, verification commands, known failures, and the next safe slice.
 
-- `--config-mode=auto`: infer from repo evidence and use safe defaults.
-- `--config-mode=custom`: prompt or require explicit adapter choices.
-- GitNexus should be installed and used as MCP when chosen; wrapper commands are
-  recorded as fallback when a target repo has them.
+## Why The Workflow Works
+
+- **Profiles keep the workflow portable.** The generic skill stays clean; app-specific truth lives in `apex.workflow.json`.
+- **Mode selection prevents ceremony creep.** Tiny fixes stay tiny, while shared surfaces trigger stronger routing and verification.
+- **Slice manifests remove ambiguity.** The agent always has a current-slice file list, no-touch list, and finish packet.
+- **Contracts beat vibes.** The agent reads feature/state docs before touching shared workflows.
+- **Code intelligence is adapter-based.** GitNexus MCP is preferred, wrapper fallback is supported, and source search remains the final fallback.
+- **Verification is scoped.** Focused checks come first; broad checks are used when the blast radius justifies them.
+- **Tracker state stays honest.** Linear, GitHub, file trackers, or no tracker can be configured without turning the tracker into product truth.
+
+## Tradeoffs
+
+Pros:
+
+- gives agents a repeatable install and execution path
+- lowers resume ambiguity across long-running work
+- makes shared-surface risk visible before edits
+- keeps product truth, tracker state, code intelligence, and verification separate
+- works with MCP-first GitNexus while preserving wrapper fallback for fragile local setups
+
+Cons:
+
+- requires an app profile before the workflow is useful
+- adds one small manifest step for meaningful code slices
+- cannot infer every product authority document perfectly on first install
+- GitNexus still depends on the host agent's MCP/runtime health unless a wrapper fallback is configured
+- teams need to keep their repo docs and tracker semantics honest for the harness to stay valuable
+
+## Repository Contents
+
+- `AGENTS.md`: instructions for agents installing this harness.
+- `skills/apex-workflow/`: installable Codex skill.
+- `templates/apex.workflow.json`: starter app profile.
+- `profiles/minty.workflow.json`: first extracted real-world profile.
+- `schemas/apex.workflow.schema.json`: profile schema.
+- `scripts/init-harness.mjs`: target-repo installer.
+- `scripts/apex-manifest.mjs`: slice manifest helper.
+- `scripts/check-config.mjs`: profile validator.
+- `docs/adoption.md`: setup details.
+- `docs/extraction-map.md`: what was extracted and why.
 
 ## Local Checks
 
@@ -63,23 +120,3 @@ npm run check:config
 npm run self-check
 ```
 
-## Manual Use In Another App
-
-Manual setup is still possible, but the installer is the default. If doing it
-manually:
-
-1. Copy `templates/apex.workflow.json` into the target repo as `apex.workflow.json`.
-2. Fill in authority docs, orientation docs, tracker, code-intelligence, contracts, verification, and UI/UX policy.
-3. Install or symlink `skills/apex-workflow` into your Codex skill directory.
-4. Run the manifest helper from the target repo.
-
-```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
-  new \
-  --config=apex.workflow.json \
-  --file=tmp/apex-workflow/<slice>.json \
-  --issue=none \
-  --mode=route-local \
-  --surface="owning surface" \
-  --downshift="route-local: one owner and focused checks cover the slice"
-```
