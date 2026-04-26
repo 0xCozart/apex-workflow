@@ -41,6 +41,7 @@ Options:
   --code-intelligence=auto|focused-search|gitnexus-mcp|gitnexus-wrapper
   --browser=auto|none|agent-browser
   --origin=<url>                  Browser origin when browser provider is enabled.
+  --operator-cautions=<text>      Comma-separated human cautions. Not treated as authority paths.
   --skill-dir=<path>              Codex skills directory. Defaults to $CODEX_HOME/skills or ~/.codex/skills.
   --skip-agents                   Do not create/update AGENTS.md.
   --skip-skill-link               Do not symlink the local skill.
@@ -88,8 +89,54 @@ function splitCsv(value) {
     .filter(Boolean);
 }
 
+function resolveExistingRelativePath(targetRoot, candidate) {
+  const parts = String(candidate).split(/[\\/]+/).filter(Boolean);
+  let current = targetRoot;
+  const actualParts = [];
+
+  for (const part of parts) {
+    let entries;
+    try {
+      entries = readdirSync(current, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+
+    const exact = entries.find((entry) => entry.name === part);
+    const caseInsensitive = exact ?? entries.find((entry) => entry.name.toLowerCase() === part.toLowerCase());
+    if (!caseInsensitive) return null;
+
+    actualParts.push(caseInsensitive.name);
+    current = join(current, caseInsensitive.name);
+  }
+
+  return actualParts.join("/");
+}
+
 function existingRelativePaths(targetRoot, candidates) {
-  return candidates.filter((entry) => existsSync(join(targetRoot, entry)));
+  return [
+    ...new Set(
+      candidates
+        .map((entry) => resolveExistingRelativePath(targetRoot, entry))
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function existingRelativePathRecords(targetRoot, candidates, reason) {
+  return existingRelativePaths(targetRoot, candidates).map((filePath) => ({
+    path: filePath,
+    confidence: "confirmed",
+    reason,
+  }));
+}
+
+function discoveredPathRecords(targetRoot, predicate, reason) {
+  return discoverDocs(targetRoot, predicate).map((filePath) => ({
+    path: filePath,
+    confidence: "guessed",
+    reason,
+  }));
 }
 
 function firstExisting(targetRoot, candidates) {
@@ -145,11 +192,24 @@ function rankProductTruth(filePath) {
   return 10;
 }
 
-function chooseAuthorityDocs(candidates, limit = 3) {
-  const ranked = [...new Set(candidates)].sort(
-    (left, right) => rankProductTruth(left) - rankProductTruth(right) || left.localeCompare(right),
+function dedupeRecords(records) {
+  const byPath = new Map();
+
+  for (const record of records) {
+    const existing = byPath.get(record.path);
+    if (!existing || (existing.confidence === "guessed" && record.confidence === "confirmed")) {
+      byPath.set(record.path, record);
+    }
+  }
+
+  return [...byPath.values()];
+}
+
+function chooseAuthorityDocRecords(candidates, limit = 3) {
+  const ranked = dedupeRecords(candidates).sort(
+    (left, right) => rankProductTruth(left.path) - rankProductTruth(right.path) || left.path.localeCompare(right.path),
   );
-  const strongMatches = ranked.filter((filePath) => rankProductTruth(filePath) < 20);
+  const strongMatches = ranked.filter((record) => rankProductTruth(record.path) < 20);
   return (strongMatches.length > 0 ? strongMatches : ranked).slice(0, limit);
 }
 
@@ -159,46 +219,84 @@ function inferName(targetRoot, pkg, args) {
 
 function inferAuthority(targetRoot) {
   const productCandidates = [
-    ...existingRelativePaths(targetRoot, [
-      "PRD.md",
-      "PRODUCT.md",
-      "PRODUCT_REQUIREMENTS.md",
-      "docs/PRD.md",
-      "docs/product.md",
-      "docs/product-requirements.md",
-      "docs/PRODUCT.md",
-    ]),
-    ...discoverDocs(targetRoot, (filePath) =>
+    ...existingRelativePathRecords(
+      targetRoot,
+      [
+        "PRD.md",
+        "PRODUCT.md",
+        "PRODUCT_REQUIREMENTS.md",
+        "docs/PRD.md",
+        "docs/product.md",
+        "docs/product-requirements.md",
+        "docs/PRODUCT.md",
+      ],
+      "canonical product authority filename",
+    ),
+    ...discoveredPathRecords(targetRoot, (filePath) =>
       (filePath.includes("prd") || filePath.includes("product-requirements") || filePath.endsWith("/product.md")) &&
       !filePath.includes("thesis"),
+      "matched product/prd filename pattern",
     ),
   ];
   const executionCandidates = [
-    ...existingRelativePaths(targetRoot, ["TRACKER.md", "ROADMAP.md", "docs/TRACKER.md", "docs/roadmap.md"]),
-    ...discoverDocs(targetRoot, (filePath) => filePath.includes("tracker") || filePath.includes("roadmap")),
+    ...existingRelativePathRecords(
+      targetRoot,
+      ["TRACKER.md", "ROADMAP.md", "docs/TRACKER.md", "docs/roadmap.md"],
+      "canonical execution-state filename",
+    ),
+    ...discoveredPathRecords(
+      targetRoot,
+      (filePath) => filePath.includes("tracker") || filePath.includes("roadmap"),
+      "matched tracker/roadmap filename pattern",
+    ),
   ];
+  const workflowRuleRecords = existingRelativePathRecords(
+    targetRoot,
+    ["AGENTS.md", "CLAUDE.md", "docs/CODEBASE_MAP.md"],
+    "repo workflow rule file exists",
+  );
+  const excludedAuthorityRecords = [
+    ...existingRelativePathRecords(targetRoot, ["PRODUCT_THESIS.md"], "known non-authoritative thesis file"),
+    ...discoveredPathRecords(targetRoot, (filePath) => filePath.includes("thesis"), "matched thesis filename pattern"),
+  ];
+  const productTruth = chooseAuthorityDocRecords(productCandidates, 3);
+  const executionTruth = dedupeRecords(executionCandidates).slice(0, 3);
+  const doNotUseAsAuthority = dedupeRecords(excludedAuthorityRecords);
 
   return {
-    productTruth: chooseAuthorityDocs(productCandidates, 3),
-    executionTruth: [...new Set(executionCandidates)].slice(0, 3),
-    workflowRules: existingRelativePaths(targetRoot, ["AGENTS.md", "CLAUDE.md", "docs/CODEBASE_MAP.md"]),
-    doNotUseAsAuthority: [
-      ...new Set([
-        ...existingRelativePaths(targetRoot, ["PRODUCT_THESIS.md"]),
-        ...discoverDocs(targetRoot, (filePath) => filePath.includes("thesis")),
-      ]),
-    ],
+    authority: {
+      productTruth: productTruth.map((record) => record.path),
+      executionTruth: executionTruth.map((record) => record.path),
+      workflowRules: workflowRuleRecords.map((record) => record.path),
+      doNotUseAsAuthority: doNotUseAsAuthority.map((record) => record.path),
+    },
+    inferredPaths: {
+      productTruth,
+      executionTruth,
+      workflowRules: workflowRuleRecords,
+      doNotUseAsAuthority,
+    },
   };
 }
 
 function inferOrientation(targetRoot) {
-  const readBeforeBroadSearch = existingRelativePaths(targetRoot, [
-    "docs/CODEBASE_MAP.md",
-    "docs/ARCHITECTURE.md",
-    "ARCHITECTURE.md",
-    "README.md",
-  ]);
+  const readFirstRecords = existsSync(join(targetRoot, "AGENTS.md"))
+    ? existingRelativePathRecords(targetRoot, ["AGENTS.md"], "repo entrypoint exists")
+    : [{ path: "AGENTS.md", confidence: "generated", reason: "installer creates AGENTS.md managed block" }];
+  const readBeforeBroadSearchRecords = existingRelativePathRecords(
+    targetRoot,
+    [
+      "docs/CODEBASE_MAP.md",
+      "docs/codebase-map.md",
+      "docs/architecture.md",
+      "docs/ARCHITECTURE.md",
+      "ARCHITECTURE.md",
+      "README.md",
+    ],
+    "orientation doc exists",
+  );
   const sectionedDocs = [];
+  const sectionedDocRecords = [];
 
   if (existsSync(join(targetRoot, "CLAUDE.md"))) {
     sectionedDocs.push({
@@ -210,12 +308,24 @@ function inferOrientation(targetRoot) {
         browserAutomation: "Read only when browser work is needed.",
       },
     });
+    sectionedDocRecords.push({
+      path: "CLAUDE.md",
+      confidence: "confirmed",
+      reason: "sectioned repo guidance exists",
+    });
   }
 
   return {
-    readFirst: ["AGENTS.md"],
-    readBeforeBroadSearch,
-    sectionedDocs,
+    orientation: {
+      readFirst: readFirstRecords.map((record) => record.path),
+      readBeforeBroadSearch: readBeforeBroadSearchRecords.map((record) => record.path),
+      sectionedDocs,
+    },
+    inferredPaths: {
+      readFirst: readFirstRecords,
+      readBeforeBroadSearch: readBeforeBroadSearchRecords,
+      sectionedDocs: sectionedDocRecords,
+    },
   };
 }
 
@@ -457,14 +567,36 @@ async function buildConfig(targetRoot, args) {
       args.origin = await promptText(rl, "Browser origin", args.origin ?? "http://127.0.0.1:3000", promptAdapters);
     }
 
-    const authority = inferAuthority(targetRoot);
-    const orientation = inferOrientation(targetRoot);
+    const authorityResult = inferAuthority(targetRoot);
+    const authority = authorityResult.authority;
+    const orientationResult = inferOrientation(targetRoot);
+    const orientation = orientationResult.orientation;
     const workflowRules = new Set([...authority.workflowRules, "AGENTS.md"]);
+    const contracts = inferContracts(targetRoot);
+    const guessedAuthorityPaths = [
+      ...authorityResult.inferredPaths.productTruth,
+      ...authorityResult.inferredPaths.executionTruth,
+    ].filter((record) => record.confidence === "guessed");
+    const reviewNeeded = [
+      ...(authority.productTruth.length === 0 ? ["No product truth doc was detected. Add one to authority.productTruth if the app has it."] : []),
+      ...(orientation.readBeforeBroadSearch.length === 0 ? ["No broad-search orientation doc was detected. Consider adding a codebase map or architecture doc."] : []),
+      ...(contracts.featureArtifacts.length === 0 && contracts.stateContracts.length === 0
+        ? ["No contract directories were detected. Shared-surface work will rely on source search and surrogate docs."]
+        : []),
+      ...(guessedAuthorityPaths.length > 0
+        ? [
+            `Review guessed authority paths before the first implementation slice: ${guessedAuthorityPaths
+              .map((record) => record.path)
+              .join(", ")}`,
+          ]
+        : []),
+    ];
 
     return {
       ...template,
       name,
       description: `Apex Workflow profile for ${name}. Generated by the harness installer.`,
+      operatorCautions: splitCsv(args["operator-cautions"] ?? args["operator-caution"]),
       authority: {
         ...authority,
         workflowRules: [...workflowRules],
@@ -472,7 +604,7 @@ async function buildConfig(targetRoot, args) {
       orientation,
       tracker: makeTracker(args),
       codeIntelligence: inferCodeIntelligence(targetRoot, pkg, args),
-      contracts: inferContracts(targetRoot),
+      contracts,
       verification: inferVerification(targetRoot, pkg, args),
       uiUx: inferUiUx(targetRoot),
       manifest: template.manifest,
@@ -481,13 +613,12 @@ async function buildConfig(targetRoot, args) {
         configMode,
         apexRoot: APEX_ROOT,
         targetRoot,
-        reviewNeeded: [
-          ...(authority.productTruth.length === 0 ? ["No product truth doc was detected. Add one to authority.productTruth if the app has it."] : []),
-          ...(orientation.readBeforeBroadSearch.length === 0 ? ["No broad-search orientation doc was detected. Consider adding a codebase map or architecture doc."] : []),
-          ...(inferContracts(targetRoot).featureArtifacts.length === 0 && inferContracts(targetRoot).stateContracts.length === 0
-            ? ["No contract directories were detected. Shared-surface work will rely on source search and surrogate docs."]
-            : []),
-        ],
+        reviewRequiredBeforeFirstSlice: reviewNeeded.length > 0,
+        reviewNeeded,
+        inferredPaths: {
+          authority: authorityResult.inferredPaths,
+          orientation: orientationResult.inferredPaths,
+        },
       },
     };
   } finally {
@@ -503,6 +634,7 @@ function makeAgentsBlock(targetRoot) {
 Use \`$apex-workflow\` for meaningful execution in this repo.
 
 - Profile: \`apex.workflow.json\`
+- Review \`setup.reviewNeeded\`, \`setup.inferredPaths\`, and \`operatorCautions\` before the first implementation slice.
 - Select the lightest safe mode before implementation.
 - For meaningful code-facing work, create or update a slice manifest under \`tmp/apex-workflow/\`.
 - Use the configured tracker, code-intelligence, browser, and UI/UX adapters from the profile.
@@ -578,7 +710,85 @@ function validateGeneratedConfig(targetRoot) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-function printSummary({ targetRoot, configPath, agentsResult, skillResult, dryRun }) {
+function getGitStatus(targetRoot) {
+  const result = spawnSync("git", ["-C", targetRoot, "status", "--short", "--branch"], {
+    encoding: "utf8",
+  });
+
+  if (result.error || result.status !== 0) {
+    return {
+      available: false,
+      dirty: false,
+      bootstrapDirty: false,
+      summary: "not a git repo or git status unavailable",
+      lines: [],
+    };
+  }
+
+  const lines = result.stdout
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+  const dirtyLines = lines.filter((line) => !line.startsWith("##"));
+  const bootstrapDirty = dirtyLines.some((line) => /\b(AGENTS\.md|apex\.workflow\.json)\b/.test(line));
+  const branchLine = lines.find((line) => line.startsWith("##")) ?? "## unknown";
+
+  return {
+    available: true,
+    dirty: dirtyLines.length > 0,
+    bootstrapDirty,
+    summary: dirtyLines.length > 0 ? `${branchLine}; ${dirtyLines.length} changed path(s)` : `${branchLine}; clean`,
+    lines,
+  };
+}
+
+function printPathRecords(label, records) {
+  console.log(`- ${label}:`);
+  if (!records || records.length === 0) {
+    console.log("  - none detected");
+    return;
+  }
+
+  for (const record of records) {
+    console.log(`  - [${record.confidence}] ${record.path} (${record.reason})`);
+  }
+}
+
+function printInstallReport({ config, targetRoot, dryRun }) {
+  const gitStatus = getGitStatus(targetRoot);
+  console.log("\n[apex-init] install report");
+  console.log(`- config mode: ${config.setup?.configMode ?? "unknown"}`);
+  console.log(`- tracker: ${config.tracker.provider}${config.tracker.project ? ` / ${config.tracker.project}` : ""}`);
+  console.log(`- code intelligence: ${config.codeIntelligence.provider}`);
+  console.log(`- browser: ${config.verification.browser.provider}`);
+  console.log(`- git status: ${gitStatus.summary}`);
+
+  printPathRecords("authority.productTruth", config.setup?.inferredPaths?.authority?.productTruth ?? []);
+  printPathRecords("authority.executionTruth", config.setup?.inferredPaths?.authority?.executionTruth ?? []);
+  printPathRecords("orientation.readBeforeBroadSearch", config.setup?.inferredPaths?.orientation?.readBeforeBroadSearch ?? []);
+
+  if (config.operatorCautions?.length > 0) {
+    console.log("- operator cautions:");
+    for (const caution of config.operatorCautions) console.log(`  - ${caution}`);
+  }
+
+  if (config.setup?.reviewNeeded?.length > 0) {
+    console.log("- review before first slice:");
+    for (const item of config.setup.reviewNeeded) console.log(`  - ${item}`);
+  } else {
+    console.log("- review before first slice: no installer concerns recorded");
+  }
+
+  if (!dryRun && gitStatus.bootstrapDirty) {
+    console.log("- baseline checkpoint: commit AGENTS.md/apex.workflow.json setup before the first implementation slice");
+  } else if (!dryRun && gitStatus.dirty) {
+    console.log("- baseline checkpoint: repo is dirty; separate existing changes from the first implementation slice");
+  } else if (!dryRun && gitStatus.available) {
+    console.log("- baseline checkpoint: clean baseline detected");
+  }
+}
+
+function printSummary({ targetRoot, configPath, agentsResult, skillResult, dryRun, config }) {
   const prefix = dryRun ? "[apex-init] dry run complete" : "[apex-init] installed";
   console.log(prefix);
   console.log(`- target: ${targetRoot}`);
@@ -588,6 +798,7 @@ function printSummary({ targetRoot, configPath, agentsResult, skillResult, dryRu
   if (skillResult.skipped) console.log("- skill link: skipped");
   else console.log(`- skill link: ${skillResult.path}${skillResult.alreadyInstalled ? " (already installed)" : ""}`);
   console.log("- next: use $apex-workflow in the target repo and read apex.workflow.json before selecting a mode");
+  printInstallReport({ config, targetRoot, dryRun });
 }
 
 async function main() {
@@ -616,7 +827,7 @@ async function main() {
   const skillResult = installSkillLink(args);
 
   if (!args["dry-run"]) validateGeneratedConfig(targetRoot);
-  printSummary({ targetRoot, configPath, agentsResult, skillResult, dryRun: Boolean(args["dry-run"]) });
+  printSummary({ targetRoot, configPath, agentsResult, skillResult, dryRun: Boolean(args["dry-run"]), config });
 }
 
 main().catch((error) => {

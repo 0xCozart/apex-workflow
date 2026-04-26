@@ -51,6 +51,9 @@ When the user asks to install Apex Workflow from a GitHub repo or local clone:
    - `--browser=auto|none|agent-browser`
 5. Confirm that `apex.workflow.json` validates and that the target `AGENTS.md`
    has the managed Apex block.
+6. Read the install report. Before the first implementation slice, resolve or
+   consciously accept `setup.reviewNeeded`, confirm any `setup.inferredPaths`
+   marked `guessed`, and preserve any `operatorCautions`.
 
 Do not treat skill installation as complete until the target repo has a profile.
 When GitNexus is selected, prefer `gitnexus-mcp`. Use `gitnexus-wrapper` only

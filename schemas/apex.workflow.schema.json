@@ -20,6 +20,7 @@
     "version": { "const": 1 },
     "name": { "type": "string", "minLength": 1 },
     "description": { "type": "string" },
+    "operatorCautions": { "type": "array", "items": { "type": "string" } },
     "authority": {
       "type": "object",
       "required": ["productTruth", "executionTruth", "workflowRules", "doNotUseAsAuthority"],
@@ -171,6 +172,17 @@
       "properties": {
         "defaultDir": { "type": "string", "minLength": 1 },
         "finishPacket": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "setup": {
+      "type": "object",
+      "properties": {
+        "generatedBy": { "type": "string" },
+        "configMode": { "type": "string" },
+        "reviewRequiredBeforeFirstSlice": { "type": "boolean" },
+        "reviewNeeded": { "type": "array", "items": { "type": "string" } },
+        "inferredPaths": { "type": "object" }
       },
       "additionalProperties": true
     }

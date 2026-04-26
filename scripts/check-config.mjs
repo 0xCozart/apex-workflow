@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { isAbsolute, join, parse, resolve, sep } from "node:path";
 import process from "node:process";
 
 function usage(exitCode = 0) {
@@ -76,6 +76,34 @@ function collectDocPath(rawValue) {
   return rawValue.split("#")[0].trim();
 }
 
+function exactPathInfo(filePath) {
+  const absolute = resolve(filePath);
+  if (!existsSync(absolute)) return { exists: false, exact: false, actualPath: null };
+
+  const parsed = parse(absolute);
+  const parts = absolute.slice(parsed.root.length).split(sep).filter(Boolean);
+  let current = parsed.root;
+
+  for (const [index, part] of parts.entries()) {
+    let names;
+    try {
+      names = readdirSync(current);
+    } catch {
+      return { exists: true, exact: false, actualPath: join(current, ...parts.slice(index)) };
+    }
+
+    if (!names.includes(part)) {
+      const caseInsensitiveMatch = names.find((name) => name.toLowerCase() === part.toLowerCase());
+      const actualPath = join(current, caseInsensitiveMatch ?? part, ...parts.slice(index + 1));
+      return { exists: true, exact: false, actualPath };
+    }
+
+    current = join(current, part);
+  }
+
+  return { exists: true, exact: true, actualPath: absolute };
+}
+
 function collectPathEntries(config) {
   const entries = [];
 
@@ -129,6 +157,7 @@ function validateConfig(config, options) {
 
   if (config.version !== 1) failures.push("version must be 1");
   requireString(config, "name", failures);
+  if (config.operatorCautions !== undefined) requireArray(config, "operatorCautions", failures);
 
   const authority = requireObject(config, "authority", failures);
   requireArray(authority, "productTruth", failures);
@@ -204,8 +233,19 @@ function validateConfig(config, options) {
 
     for (const entry of collectPathEntries(config)) {
       const absolute = resolveTargetPath(targetRoot, entry.path);
-      if (!existsSync(absolute)) {
+      const info = exactPathInfo(absolute);
+      if (!info.exists) {
         const message = `${entry.source} points to missing path under target: ${entry.path}`;
+        if (entry.required) failures.push(message);
+        else warnings.push(message);
+      } else if (!info.exact) {
+        const actualPath =
+          info.actualPath && info.actualPath.startsWith(targetRoot)
+            ? info.actualPath.slice(targetRoot.length + 1)
+            : info.actualPath;
+        const message = `${entry.source} path casing does not match filesystem: ${entry.path}${
+          actualPath ? ` (actual: ${actualPath})` : ""
+        }`;
         if (entry.required) failures.push(message);
         else warnings.push(message);
       }

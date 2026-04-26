@@ -2,11 +2,12 @@
 
 Apex Workflow is configured by `apex.workflow.json`.
 
-## Required Top-Level Fields
+## Top-Level Fields
 
 - `version`: currently `1`
 - `name`: app or repo name
 - `authority`: product, execution, and workflow source lists
+- `operatorCautions`: human-readable cautions that are not path authority, such as secret-handling or public/private repo boundaries
 - `orientation`: docs to read before broad search
 - `modes`: allowed workflow modes
 - `tracker`: tracker adapter and recording policy
@@ -62,7 +63,20 @@ npm run init -- \
 ```
 
 The installer writes `apex.workflow.json`, updates `AGENTS.md`, validates the
-profile, and links the local skill unless `--skip-skill-link` is passed.
+profile, prints an install report, and links the local skill unless
+`--skip-skill-link` is passed.
+
+The install report includes:
+
+- inferred authority and orientation paths with `confirmed`, `guessed`, or `generated` confidence
+- tracker, code-intelligence, and browser choices
+- target repo dirty state
+- review items to resolve before the first implementation slice
+- baseline checkpoint guidance when setup files are uncommitted
+
+Use `--operator-cautions="Do not copy secrets, Keep public docs separate"` for
+textual cautions. Do not put prose cautions in `authority.doNotUseAsAuthority`;
+that field is path-like and the validator treats it as profile path data.
 
 ## Profile Rules
 
@@ -71,3 +85,5 @@ profile, and links the local skill unless `--skip-skill-link` is passed.
 - Commands may include placeholders such as `{symbol}`, `{query}`, `{file}`, and `{changedFilesFile}`.
 - `codeIntelligence.detectCommand` should accept a changed-files file placeholder when the provider supports scoped analysis.
 - If a target app has no tracker, set `tracker.provider` to `none` and require explicit skip reasons in manifests.
+- Review `setup.inferredPaths` before the first slice. Anything marked `guessed` is a candidate, not confirmed authority.
+- Required path validation is exact-case. Fix `docs/ARCHITECTURE.md` to `docs/architecture.md` when that is the real file.

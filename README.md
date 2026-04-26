@@ -132,6 +132,8 @@ npm run init -- \
 
 The installer writes `apex.workflow.json`, adds a managed Apex block to the target repo's `AGENTS.md`, validates the profile, and symlinks the `$apex-workflow` skill into the local Codex skills directory.
 
+It also prints an install report: inferred authority paths with confidence, adapter choices, dirty repo state, review items, and whether to commit the harness setup before the first implementation slice.
+
 ## What The Profile Controls
 
 `apex.workflow.json` is the contract between the target app and the agent.

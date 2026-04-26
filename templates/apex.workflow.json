@@ -2,6 +2,7 @@
   "version": 1,
   "name": "example-app",
   "description": "Apex Workflow profile for this app.",
+  "operatorCautions": [],
   "authority": {
     "productTruth": [],
     "executionTruth": [],

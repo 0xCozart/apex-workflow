@@ -30,6 +30,7 @@ The installer will:
 - write `apex.workflow.json`
 - create or update a managed Apex block in `AGENTS.md`
 - validate the generated profile
+- print a post-install report with inferred path confidence, adapter choices, repo dirty state, and next checkpoint guidance
 - symlink the local `apex-workflow` skill unless `--skip-skill-link` is passed
 
 ## 2. Profile Review
@@ -45,12 +46,24 @@ After install, review `apex.workflow.json`. The profile must answer:
 - which verification commands prove a slice
 - how browser and UI/UX signoff should work
 
+Also review:
+
+- `setup.inferredPaths`: paths marked `guessed` need human or agent confirmation before the first implementation slice.
+- `setup.reviewNeeded`: installer concerns that must be resolved or consciously accepted.
+- `operatorCautions`: human-readable boundaries such as security, secret-handling, or public/private repo limits. These are not authority paths.
+
 For GitNexus, prefer `codeIntelligence.provider = "gitnexus-mcp"`. Use the
 wrapper fallback only when MCP is unavailable or unreliable in the target
 environment.
 
 If the installer could not infer product truth, contract docs, or broad-search
 orientation, it records that in `setup.reviewNeeded`.
+
+The validator checks required profile paths against the target repo and rejects
+case mismatches such as `docs/ARCHITECTURE.md` when the real file is
+`docs/architecture.md`.
+
+If the install report says `baseline checkpoint: commit AGENTS.md/apex.workflow.json setup before the first implementation slice`, do that before starting product code. Mixing harness bootstrap with implementation weakens the first manifest and finish packet.
 
 ## 3. Repo Rules
 
@@ -59,6 +72,7 @@ The installer writes this managed behavior into `AGENTS.md`:
 ```md
 Use $apex-workflow for meaningful execution.
 Read apex.workflow.json before selecting a mode.
+Review setup.reviewNeeded, setup.inferredPaths, and operatorCautions.
 For code-facing work, create or update a slice manifest.
 Use the configured tracker and code-intelligence adapters.
 ```
