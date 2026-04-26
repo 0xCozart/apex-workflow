@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "name": "example-app",
+  "description": "Apex Workflow profile for this app.",
+  "authority": {
+    "productTruth": [],
+    "executionTruth": [],
+    "workflowRules": [],
+    "doNotUseAsAuthority": []
+  },
+  "orientation": {
+    "readFirst": ["AGENTS.md"],
+    "readBeforeBroadSearch": [],
+    "sectionedDocs": []
+  },
+  "modes": [
+    {
+      "id": "tiny",
+      "useWhen": "Single known file, low risk, no durable tracker state.",
+      "requiredGates": ["direct file read", "path-scoped check"],
+      "codeFacing": true
+    },
+    {
+      "id": "route-local",
+      "useWhen": "One owner with obvious callers.",
+      "requiredGates": ["manifest", "owner/contract read", "focused checks"],
+      "codeFacing": true
+    },
+    {
+      "id": "shared-surface",
+      "useWhen": "Shared shell, store, hook, auth, workspace, or multi-route coupling.",
+      "requiredGates": ["manifest", "contract bridge", "impact check", "broader checks"],
+      "codeFacing": true
+    },
+    {
+      "id": "issue-resume",
+      "useWhen": "Named tracker issue, dirty branch, or multi-slice continuation.",
+      "requiredGates": ["manifest", "latest tracker or plan state", "no-touch surfaces", "first-gap verification"],
+      "codeFacing": true
+    },
+    {
+      "id": "planning",
+      "useWhen": "Product, design, or architecture decision before code.",
+      "requiredGates": ["durable plan artifact when useful"],
+      "codeFacing": false
+    },
+    {
+      "id": "reconciliation",
+      "useWhen": "Implementation is done and remaining work is tracker, review, audit, or wait state.",
+      "requiredGates": ["evidence packet", "tracker disposition"],
+      "codeFacing": false
+    }
+  ],
+  "tracker": {
+    "provider": "none",
+    "project": null,
+    "authorityRule": "Tracker reflects execution state, not product truth.",
+    "recordWhen": [
+      "medium or large change",
+      "user-facing flow, contract, or cross-surface behavior",
+      "likely follow-up, coordination, or prioritization need"
+    ],
+    "dispositions": ["none", "existing", "new", "blocked"]
+  },
+  "codeIntelligence": {
+    "provider": "focused-search",
+    "mcp": null,
+    "wrapperFallback": null,
+    "statusCommand": null,
+    "refreshCommand": null,
+    "queryCommand": null,
+    "contextCommand": null,
+    "impactCommand": null,
+    "detectCommand": null,
+    "fallback": "Use focused source search and route through configured docs."
+  },
+  "contracts": {
+    "featureArtifacts": [],
+    "stateContracts": [],
+    "surrogates": []
+  },
+  "verification": {
+    "focusedChecksFirst": true,
+    "requiredCommands": [],
+    "optionalCommands": [],
+    "knownFailures": null,
+    "browser": {
+      "provider": "none",
+      "origin": null,
+      "artifacts": null,
+      "policy": "Use an explicit skip reason when browser verification is not relevant."
+    }
+  },
+  "uiUx": {
+    "designSystemDocs": [],
+    "visualSignoff": "human",
+    "browserEvidencePolicy": "functional-only unless this profile explicitly allows visual signoff"
+  },
+  "manifest": {
+    "defaultDir": "tmp/apex-workflow",
+    "finishPacket": [
+      "What landed",
+      "Mode",
+      "Downshift proof",
+      "Owned files",
+      "No-touch preserved",
+      "Verified",
+      "Code-intelligence scope",
+      "Tracker update",
+      "Known failures / not verified",
+      "Next safe slice"
+    ]
+  }
+}

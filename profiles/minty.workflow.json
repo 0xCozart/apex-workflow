@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "name": "minty",
+  "description": "Minty profile for Apex Workflow. Product truth stays in Minty docs; Apex only configures the workflow.",
+  "authority": {
+    "productTruth": ["minty_master_plan_prd.md"],
+    "executionTruth": ["minty_master_plan_tracker.md"],
+    "workflowRules": ["AGENTS.md", "CLAUDE.md", "docs/CODEBASE_MAP.md"],
+    "doNotUseAsAuthority": ["PRODUCT_THESIS.md"]
+  },
+  "orientation": {
+    "readFirst": ["AGENTS.md"],
+    "readBeforeBroadSearch": ["docs/CODEBASE_MAP.md"],
+    "sectionedDocs": [
+      {
+        "path": "CLAUDE.md",
+        "sections": {
+          "workflow": "Read before non-trivial code changes.",
+          "qualityTesting": "Read before finishing non-trivial code changes.",
+          "gitnexus": "Read before GitNexus-backed routing or impact checks.",
+          "uxUi": "Read before frontend or interaction changes.",
+          "designSystem": "Read before frontend or interaction changes.",
+          "pipelineIngestion": "Read before provider, sync, cron, or provenance changes.",
+          "browserAutomation": "Read only when browser work is needed.",
+          "worktrees": "Read only when worktree flow is needed."
+        }
+      }
+    ]
+  },
+  "modes": [
+    {
+      "id": "tiny",
+      "useWhen": "Single known file, no durable state, no cross-surface risk.",
+      "requiredGates": ["direct file read", "path-scoped verification"],
+      "codeFacing": true
+    },
+    {
+      "id": "route-local",
+      "useWhen": "One route, helper, service, or component owner with obvious callers.",
+      "requiredGates": ["manifest", "owner/contract read", "focused impact where relevant", "focused checks"],
+      "codeFacing": true
+    },
+    {
+      "id": "shared-surface",
+      "useWhen": "Shared shell, store, hook, auth, profile, workspace, or multi-route coupling.",
+      "requiredGates": ["manifest", "contract routing", "GitNexus impact", "practical caller check", "broader tests"],
+      "codeFacing": true
+    },
+    {
+      "id": "issue-resume",
+      "useWhen": "Named Linear issue or dirty multi-slice continuation.",
+      "requiredGates": ["manifest", "latest tracker or plan state", "no-touch surfaces", "first-gap verification"],
+      "codeFacing": true
+    },
+    {
+      "id": "planning",
+      "useWhen": "Product, design, architecture, or workflow decision before code.",
+      "requiredGates": ["dated plan docs when durable", "plans:check for changed plan docs"],
+      "codeFacing": false
+    },
+    {
+      "id": "reconciliation",
+      "useWhen": "Implementation appears landed; remaining work is review, Linear, audit, or wait state.",
+      "requiredGates": ["reduced evidence packet", "tracker disposition", "no route-owner implementation flow"],
+      "codeFacing": false
+    }
+  ],
+  "tracker": {
+    "provider": "linear",
+    "team": "XMinty",
+    "project": "Minty Master Plan Alignment",
+    "authorityRule": "Linear reflects execution state; PRD and tracker define product truth and shipped reality.",
+    "recordWhen": [
+      "medium or large change",
+      "user-facing flow, contract, or cross-surface behavior",
+      "likely follow-up, coordination, or prioritization need",
+      "roadmap, scope, acceptance-criteria, or sequencing change"
+    ],
+    "dispositions": ["none", "existing", "new", "blocked", "reconciliation"],
+    "activeCodingState": "In Progress means active coding only."
+  },
+  "codeIntelligence": {
+    "provider": "gitnexus-mcp",
+    "mcp": {
+      "preferred": true,
+      "install": "Install GitNexus as an MCP server in the host agent, index the repo with npx gitnexus analyze, then verify gitnexus tools and gitnexus:// resources are visible to the agent.",
+      "tools": ["gitnexus_query", "gitnexus_context", "gitnexus_impact", "gitnexus_detect_changes", "gitnexus_rename"],
+      "resources": ["gitnexus://repo/minty/context", "gitnexus://repo/minty/clusters", "gitnexus://repo/minty/processes"],
+      "staleIndexCommand": "npx gitnexus analyze"
+    },
+    "wrapperFallback": {
+      "enabled": true,
+      "statusCommand": "npm run gitnexus:status",
+      "refreshCommand": "npm run gitnexus:ensure-fresh",
+      "queryCommand": "npm run gitnexus -- query \"{query}\"",
+      "contextCommand": "npm run gitnexus -- context \"{symbol}\"",
+      "impactCommand": "npm run gitnexus -- impact \"{symbol}\"",
+      "detectCommand": "node scripts/run-gitnexus-local.mjs detect_changes --changed-files-file \"{changedFilesFile}\"",
+      "setup": "Minty keeps a repo-local wrapper because MCP/local storage has been unreliable in this environment."
+    },
+    "statusCommand": null,
+    "refreshCommand": "npx gitnexus analyze",
+    "queryCommand": "gitnexus_query({query})",
+    "contextCommand": "gitnexus_context({name})",
+    "impactCommand": "gitnexus_impact({target, direction: \"upstream\"})",
+    "detectCommand": "gitnexus_detect_changes({changedFiles})",
+    "fallback": "Use the repo-local wrapper from docs/runbooks/gitnexus-local-workflow.md plus focused rg/sed caller confirmation when GitNexus MCP is stale, unavailable, or suspiciously low-signal.",
+    "highRiskWarning": "Warn before proceeding when impact is HIGH or CRITICAL."
+  },
+  "contracts": {
+    "featureArtifacts": ["docs/feature-artifacts"],
+    "stateContracts": ["docs/state-contracts"],
+    "surrogates": ["docs/plans", "docs/ROUTE-INVENTORY.md", "src/components/__tests__"]
+  },
+  "verification": {
+    "focusedChecksFirst": true,
+    "requiredCommands": [],
+    "optionalCommands": ["npm run typecheck"],
+    "knownFailures": "docs/runbooks/known-verification-failures.md",
+    "workflowDoctor": "npm run workflow:doctor",
+    "plansCheck": "npm run plans:check -- --file={file}",
+    "browser": {
+      "provider": "agent-browser",
+      "origin": "http://127.0.0.1:3000",
+      "artifacts": "tmp/agent-browser",
+      "policy": "Functional browser evidence only; visible UI changes still need a short human visual audit checklist."
+    }
+  },
+  "uiUx": {
+    "designSystemDocs": ["CLAUDE.md#UX / UI", "CLAUDE.md#Design System", ".impeccable.md"],
+    "visualSignoff": "human",
+    "browserEvidencePolicy": "functional-only for Minty screenshots until scale mismatch is resolved",
+    "principles": [
+      "route-first sequencing",
+      "truthful UI affordances",
+      "trust cues and provenance are feature contract",
+      "Terminal and Basic are densities of one product",
+      "mobile usability is mission-critical"
+    ]
+  },
+  "manifest": {
+    "defaultDir": "tmp/apex-workflow",
+    "finishPacket": [
+      "What landed",
+      "Mode",
+      "Downshift proof",
+      "Owned files",
+      "No-touch preserved",
+      "Verified",
+      "GitNexus scope",
+      "Linear update",
+      "Known failures / not verified",
+      "Next safe slice"
+    ]
+  }
+}

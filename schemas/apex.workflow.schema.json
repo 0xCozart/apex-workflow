@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/apex.workflow.schema.json",
+  "title": "Apex Workflow Profile",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "authority",
+    "orientation",
+    "modes",
+    "tracker",
+    "codeIntelligence",
+    "contracts",
+    "verification",
+    "uiUx",
+    "manifest"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "authority": {
+      "type": "object",
+      "required": ["productTruth", "executionTruth", "workflowRules", "doNotUseAsAuthority"],
+      "properties": {
+        "productTruth": { "type": "array", "items": { "type": "string" } },
+        "executionTruth": { "type": "array", "items": { "type": "string" } },
+        "workflowRules": { "type": "array", "items": { "type": "string" } },
+        "doNotUseAsAuthority": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "orientation": {
+      "type": "object",
+      "required": ["readFirst", "readBeforeBroadSearch", "sectionedDocs"],
+      "properties": {
+        "readFirst": { "type": "array", "items": { "type": "string" } },
+        "readBeforeBroadSearch": { "type": "array", "items": { "type": "string" } },
+        "sectionedDocs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "sections"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "sections": { "type": "object" }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "modes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "useWhen", "requiredGates", "codeFacing"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "useWhen": { "type": "string", "minLength": 1 },
+          "requiredGates": { "type": "array", "items": { "type": "string" } },
+          "codeFacing": { "type": "boolean" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "tracker": {
+      "type": "object",
+      "required": ["provider", "authorityRule", "recordWhen", "dispositions"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "team": { "type": ["string", "null"] },
+        "project": { "type": ["string", "null"] },
+        "authorityRule": { "type": "string", "minLength": 1 },
+        "recordWhen": { "type": "array", "items": { "type": "string" } },
+        "dispositions": { "type": "array", "items": { "type": "string" }, "contains": { "const": "none" } }
+      },
+      "additionalProperties": true
+    },
+    "codeIntelligence": {
+      "type": "object",
+      "required": ["provider", "fallback"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["focused-search", "gitnexus-mcp", "gitnexus-wrapper"]
+        },
+        "mcp": {
+          "type": ["object", "null"],
+          "properties": {
+            "preferred": { "type": "boolean" },
+            "install": { "type": "string" },
+            "tools": { "type": "array", "items": { "type": "string" } },
+            "resources": { "type": "array", "items": { "type": "string" } },
+            "staleIndexCommand": { "type": "string" }
+          },
+          "additionalProperties": true
+        },
+        "wrapperFallback": {
+          "type": ["object", "null"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "statusCommand": { "type": ["string", "null"] },
+            "refreshCommand": { "type": ["string", "null"] },
+            "queryCommand": { "type": ["string", "null"] },
+            "contextCommand": { "type": ["string", "null"] },
+            "impactCommand": { "type": ["string", "null"] },
+            "detectCommand": { "type": ["string", "null"] },
+            "setup": { "type": "string" }
+          },
+          "additionalProperties": true
+        },
+        "statusCommand": { "type": ["string", "null"] },
+        "refreshCommand": { "type": ["string", "null"] },
+        "queryCommand": { "type": ["string", "null"] },
+        "contextCommand": { "type": ["string", "null"] },
+        "impactCommand": { "type": ["string", "null"] },
+        "detectCommand": { "type": ["string", "null"] },
+        "fallback": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "contracts": {
+      "type": "object",
+      "required": ["featureArtifacts", "stateContracts", "surrogates"],
+      "properties": {
+        "featureArtifacts": { "type": "array", "items": { "type": "string" } },
+        "stateContracts": { "type": "array", "items": { "type": "string" } },
+        "surrogates": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "verification": {
+      "type": "object",
+      "required": ["focusedChecksFirst", "requiredCommands", "optionalCommands", "browser"],
+      "properties": {
+        "focusedChecksFirst": { "type": "boolean" },
+        "requiredCommands": { "type": "array", "items": { "type": "string" } },
+        "optionalCommands": { "type": "array", "items": { "type": "string" } },
+        "knownFailures": { "type": ["string", "null"] },
+        "browser": {
+          "type": "object",
+          "required": ["provider", "policy"],
+          "properties": {
+            "provider": { "type": "string", "minLength": 1 },
+            "origin": { "type": ["string", "null"] },
+            "artifacts": { "type": ["string", "null"] },
+            "policy": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "uiUx": {
+      "type": "object",
+      "required": ["designSystemDocs", "visualSignoff", "browserEvidencePolicy"],
+      "properties": {
+        "designSystemDocs": { "type": "array", "items": { "type": "string" } },
+        "visualSignoff": { "type": "string", "minLength": 1 },
+        "browserEvidencePolicy": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "manifest": {
+      "type": "object",
+      "required": ["defaultDir", "finishPacket"],
+      "properties": {
+        "defaultDir": { "type": "string", "minLength": 1 },
+        "finishPacket": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

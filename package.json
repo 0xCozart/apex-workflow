@@ -1,0 +1,12 @@
+{
+  "name": "apex-workflow",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "check:config": "node scripts/check-config.mjs --config=profiles/minty.workflow.json --target=/mnt/d/CURSOR/minty",
+    "init": "node scripts/init-harness.mjs",
+    "manifest": "node scripts/apex-manifest.mjs",
+    "self-check": "npm run check:config && node --check scripts/init-harness.mjs && node scripts/apex-manifest.mjs new --config=profiles/minty.workflow.json --file=tmp/self-check.json --issue=none --mode=planning --surface=\"apex workflow extraction\" --downshift=\"planning: workflow package extraction, no target app code\" --browser=\"skip: docs and scripts only\" --typecheck=\"skip: no target app typecheck needed\" --required=\"node scripts/check-config.mjs --config=profiles/minty.workflow.json --target=/mnt/d/CURSOR/minty\" --force && node scripts/apex-manifest.mjs check --config=profiles/minty.workflow.json --file=tmp/self-check.json && node scripts/apex-manifest.mjs summary --config=profiles/minty.workflow.json --file=tmp/self-check.json"
+  }
+}
