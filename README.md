@@ -1,46 +1,100 @@
 # Apex Workflow
 
-Apex Workflow is a configurable harness for Codex and LLM coding agents that turns "work on this repo" into a disciplined loop: orient, choose scope, record a slice, route through contracts, verify, and hand off cleanly. It gives every app its own workflow profile, so an agent can adapt to your tracker, GitNexus/MCP setup, browser tooling, design rules, and test commands without hard-coding one company's process.
+> A repo-native control plane for Codex and LLM coding agents.
+> Stop letting agents improvise your engineering process. Install a harness that forces orientation, scope control, contract routing, MCP/GitNexus impact checks, verification, and clean handoff state.
 
-## What It Is
+![Codex Workflow](https://img.shields.io/badge/Codex-workflow%20harness-111827)
+![LLM Agents](https://img.shields.io/badge/LLM%20agents-repo%20aware-0f766e)
+![MCP Ready](https://img.shields.io/badge/MCP-GitNexus%20ready-7c3aed)
+![Manifest Driven](https://img.shields.io/badge/execution-manifest%20driven-b91c1c)
 
-Apex is not another prompt dump. It is an installable repo harness that writes an `apex.workflow.json` profile into the target app, adds an agent-facing `AGENTS.md` block, installs the `$apex-workflow` skill, and gives future agents a manifest-driven way to do real engineering work without rediscovering the repo every session.
+## The Short Version
 
-## The Point
+Apex Workflow turns a repository into an agent-operable system: it installs an app-specific workflow profile, gives the agent a mode/state machine, and records every meaningful slice in a manifest before code gets touched. The result is less vague "I changed some files" automation and more controlled engineering: known authority docs, scoped ownership, explicit no-touch surfaces, code-intelligence checks, focused verification, and a next safe slice.
 
-Most coding agents fail in the same places:
+## Why This Exists
 
-- they search before they understand the repo's authority chain
-- they edit shared code as if it were local code
-- they lose track of what files belong to the current slice
-- they claim broad verification from narrow evidence
-- they create tracker noise or skip tracker state entirely
-- they forget what happened when a session resumes
+Most LLM coding agents do not fail because they cannot write code. They fail because they enter a repo with no operational discipline.
 
-Apex makes those failure modes explicit and configurable.
+They search before reading the authority chain. They edit shared surfaces as if they were local helpers. They lose track of which files belong to the current slice. They treat screenshots as visual signoff. They skip tracker state or create junk tickets. Then the next session has to reconstruct the mess from a dirty tree and half-remembered chat.
 
-## Install Flow
+Apex is the antidote: a portable workflow harness that makes the agent follow the repo's actual operating model.
+
+## Architecture
 
 ```mermaid
-flowchart TD
-  A[User asks agent to install Apex] --> B[Agent opens apex-workflow repo]
-  B --> C{Config mode?}
-  C -->|Auto| D[Infer docs, scripts, contracts, browser, code intelligence]
-  C -->|Custom| E[Ask for tracker, GitNexus, browser choices]
-  D --> F[Write apex.workflow.json]
-  E --> F
-  F --> G[Add managed AGENTS.md block]
-  G --> H[Link $apex-workflow skill]
-  H --> I[Validate profile against target repo]
+flowchart TB
+  subgraph TargetRepo[Target application repo]
+    A[AGENTS.md managed block]
+    B[apex.workflow.json profile]
+    C[tmp/apex-workflow slice manifests]
+    D[Repo docs, contracts, tests, tracker rules]
+  end
+
+  subgraph Apex[Apex Workflow repo]
+    E[$apex-workflow skill]
+    F[init-harness.mjs]
+    G[apex-manifest.mjs]
+    H[check-config.mjs]
+    I[profile schema]
+  end
+
+  subgraph Adapters[Optional adapters]
+    J[GitNexus MCP]
+    K[GitNexus wrapper fallback]
+    L[Linear or GitHub tracker]
+    M[agent-browser]
+    N[Focused source search]
+  end
+
+  F --> B
+  F --> A
+  F --> E
+  H --> B
+  E --> B
+  E --> G
+  G --> C
+  B --> D
+  B --> J
+  B --> K
+  B --> L
+  B --> M
+  B --> N
 ```
 
-From this repo:
+## Execution State Machine
+
+```mermaid
+stateDiagram-v2
+  [*] --> Orient
+  Orient --> SelectMode: read profile + repo rules
+  SelectMode --> Manifest: meaningful code slice
+  SelectMode --> DirectFix: tiny slice
+  Manifest --> Route: owner, contracts, no-touch
+  Route --> Impact: MCP/GitNexus/search
+  Impact --> Edit: risk accepted
+  Edit --> Verify: focused checks
+  Verify --> DetectScope: manifest file list
+  DetectScope --> FinishPacket
+  DirectFix --> Verify
+  FinishPacket --> [*]
+```
+
+## Install
+
+Ask the agent installing Apex one setup question:
+
+```text
+Auto-configure from repo evidence, or choose tracker/GitNexus/browser options?
+```
+
+Auto mode:
 
 ```bash
 npm run init -- --target=/path/to/app --config-mode=auto --yes
 ```
 
-For custom agent-driven setup:
+Custom mode:
 
 ```bash
 npm run init -- \
@@ -55,68 +109,117 @@ npm run init -- \
   --yes
 ```
 
-## Execution Loop
+The installer writes `apex.workflow.json`, adds a managed Apex block to the target repo's `AGENTS.md`, validates the profile, and symlinks the `$apex-workflow` skill into the local Codex skills directory.
 
-```mermaid
-flowchart LR
-  A[Task] --> B[Read app profile]
-  B --> C[Choose lightest safe mode]
-  C --> D[Create slice manifest]
-  D --> E[Read owner docs and contracts]
-  E --> F[Use MCP, GitNexus, or source search]
-  F --> G[Edit owned files only]
-  G --> H[Run focused checks]
-  H --> I[Detect changed scope]
-  I --> J[Finish packet and next safe slice]
+## What The Profile Controls
+
+`apex.workflow.json` is the contract between the target app and the agent.
+
+```json
+{
+  "authority": {
+    "productTruth": ["PRD.md"],
+    "executionTruth": ["ROADMAP.md"],
+    "workflowRules": ["AGENTS.md"]
+  },
+  "tracker": {
+    "provider": "linear"
+  },
+  "codeIntelligence": {
+    "provider": "gitnexus-mcp",
+    "wrapperFallback": {
+      "enabled": true
+    }
+  },
+  "manifest": {
+    "defaultDir": "tmp/apex-workflow"
+  }
+}
 ```
 
-The manifest is the spine. It records the issue/tracker disposition, mode, owned files, no-touch surfaces, contracts read, code-intelligence checks, browser expectation, verification commands, known failures, and the next safe slice.
+It tells the agent what counts as product truth, what workflow rules to read, which tracker to use, whether GitNexus runs through MCP or a wrapper, where contract docs live, which checks matter, and how browser evidence should be treated.
 
-## Why The Workflow Works
+## Modes
 
-- **Profiles keep the workflow portable.** The generic skill stays clean; app-specific truth lives in `apex.workflow.json`.
-- **Mode selection prevents ceremony creep.** Tiny fixes stay tiny, while shared surfaces trigger stronger routing and verification.
-- **Slice manifests remove ambiguity.** The agent always has a current-slice file list, no-touch list, and finish packet.
-- **Contracts beat vibes.** The agent reads feature/state docs before touching shared workflows.
-- **Code intelligence is adapter-based.** GitNexus MCP is preferred, wrapper fallback is supported, and source search remains the final fallback.
-- **Verification is scoped.** Focused checks come first; broad checks are used when the blast radius justifies them.
-- **Tracker state stays honest.** Linear, GitHub, file trackers, or no tracker can be configured without turning the tracker into product truth.
+| Mode | Use When | Guardrail |
+| --- | --- | --- |
+| `tiny` | One known file, low blast radius | Direct file read, path-scoped check |
+| `route-local` | One owner with obvious callers | Manifest, owner docs, focused verification |
+| `shared-surface` | Shared shell/store/hook/auth/workspace | Contracts, impact analysis, no-touch list |
+| `issue-resume` | Named tracker issue or dirty continuation | Latest state, first real gap, no widening |
+| `planning` | Product/design/architecture before code | Durable decision artifact when useful |
+| `reconciliation` | Code landed, remaining work is review/tracker/audit | Evidence packet, no reopened code flow |
 
-## Tradeoffs
+## GitNexus Strategy
+
+Apex is MCP-first.
+
+When GitNexus is selected, the profile prefers:
+
+- `gitnexus_query`
+- `gitnexus_context`
+- `gitnexus_impact`
+- `gitnexus_detect_changes`
+- `gitnexus://repo/{name}/context`
+
+If MCP fails because of host config, runtime, stale reloads, or local storage issues, Apex records a wrapper fallback. That wrapper should expose the same intent through repo-local commands like `npm run gitnexus:status`, `npm run gitnexus -- impact <symbol>`, and manifest-backed `detect_changes`.
+
+MCP is the clean path. The wrapper is the survival path.
+
+## Why It Works
+
+- **It makes repo authority explicit.** The agent reads the right docs before broad search.
+- **It makes scope tangible.** The manifest names owned files, no-touch surfaces, checks, and next slice.
+- **It prevents overbuilt process.** Mode selection lets tiny work stay tiny and shared work get the heavier guardrails it deserves.
+- **It separates concerns.** Product truth, tracker state, graph intelligence, browser evidence, and verification are different systems.
+- **It supports real-world failure.** If MCP breaks, fallback paths are documented instead of pretending the tool is fine.
+- **It improves handoff quality.** Every meaningful pass ends with what landed, what was verified, what was not verified, and what comes next.
+
+## Pros And Cons
 
 Pros:
 
-- gives agents a repeatable install and execution path
-- lowers resume ambiguity across long-running work
-- makes shared-surface risk visible before edits
-- keeps product truth, tracker state, code intelligence, and verification separate
-- works with MCP-first GitNexus while preserving wrapper fallback for fragile local setups
+- repeatable install path for agent workflows
+- lower resume ambiguity across long-running coding sessions
+- cleaner boundaries for multi-agent or dirty-branch work
+- fewer broad, ungrounded edits to shared surfaces
+- MCP/GitNexus integration without betting everything on one transport
+- works across apps because the app profile carries the local truth
 
 Cons:
 
-- requires an app profile before the workflow is useful
-- adds one small manifest step for meaningful code slices
-- cannot infer every product authority document perfectly on first install
-- GitNexus still depends on the host agent's MCP/runtime health unless a wrapper fallback is configured
-- teams need to keep their repo docs and tracker semantics honest for the harness to stay valuable
+- requires a profile before the workflow is useful
+- adds a manifest step for meaningful code slices
+- depends on the target repo having honest docs, tests, and tracker semantics
+- auto-detection is useful but not magic; product authority may need review
+- GitNexus MCP still depends on the host agent's MCP support unless wrapper fallback is configured
 
-## Repository Contents
+## Repository Layout
 
-- `AGENTS.md`: instructions for agents installing this harness.
-- `skills/apex-workflow/`: installable Codex skill.
-- `templates/apex.workflow.json`: starter app profile.
-- `profiles/minty.workflow.json`: first extracted real-world profile.
-- `schemas/apex.workflow.schema.json`: profile schema.
-- `scripts/init-harness.mjs`: target-repo installer.
-- `scripts/apex-manifest.mjs`: slice manifest helper.
-- `scripts/check-config.mjs`: profile validator.
-- `docs/adoption.md`: setup details.
-- `docs/extraction-map.md`: what was extracted and why.
+```text
+apex-workflow/
+  AGENTS.md                         agent-facing install contract
+  README.md                         this landing page
+  package.json                      init, manifest, validation scripts
+  templates/apex.workflow.json      blank target-app profile
+  profiles/minty.workflow.json      extracted production profile
+  schemas/apex.workflow.schema.json profile schema
+  scripts/init-harness.mjs          target repo installer
+  scripts/apex-manifest.mjs         slice manifest lifecycle
+  scripts/check-config.mjs          profile validator
+  skills/apex-workflow/SKILL.md     Codex skill entrypoint
+  docs/adoption.md                  install details
+  docs/extraction-map.md            extraction notes
+```
 
-## Local Checks
+## Local Verification
 
 ```bash
 npm run check:config
 npm run self-check
 ```
+
+## The Philosophy
+
+Apex does not try to make agents autonomous by removing process. It makes them effective by giving them the process a senior engineer would enforce anyway: read the repo, choose the smallest safe mode, respect contracts, prove the slice, and leave the next agent a clean trail.
 
