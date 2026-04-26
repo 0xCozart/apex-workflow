@@ -22,62 +22,83 @@ Apex is the antidote: a portable workflow harness that makes the agent follow th
 
 ## Architecture
 
-```mermaid
-flowchart TB
-  subgraph TargetRepo[Target application repo]
-    A[AGENTS.md managed block]
-    B[apex.workflow.json profile]
-    C[tmp/apex-workflow slice manifests]
-    D[Repo docs, contracts, tests, tracker rules]
-  end
+```text
+APEX WORKFLOW CONTROL PLANE
 
-  subgraph Apex[Apex Workflow repo]
-    E[$apex-workflow skill]
-    F[init-harness.mjs]
-    G[apex-manifest.mjs]
-    H[check-config.mjs]
-    I[profile schema]
-  end
-
-  subgraph Adapters[Optional adapters]
-    J[GitNexus MCP]
-    K[GitNexus wrapper fallback]
-    L[Linear or GitHub tracker]
-    M[agent-browser]
-    N[Focused source search]
-  end
-
-  F --> B
-  F --> A
-  F --> E
-  H --> B
-  E --> B
-  E --> G
-  G --> C
-  B --> D
-  B --> J
-  B --> K
-  B --> L
-  B --> M
-  B --> N
+[apex-workflow repo]
+  scripts/init-harness.mjs
+  scripts/check-config.mjs
+  scripts/apex-manifest.mjs
+  skills/apex-workflow/SKILL.md
+        |
+        | install / refresh
+        v
+[target application repo]
+  AGENTS.md managed block
+  apex.workflow.json
+  tmp/apex-workflow/*.json
+  repo docs / contracts / tests
+        |
+        | every agent run reads the profile
+        v
+[$apex-workflow agent skill]
+  mode selector
+  manifest discipline
+  contract + routing gates
+  finish packet handoff
+        |
+        | adapter layer from apex.workflow.json
+        v
+[external intelligence + ops]
+  GitNexus MCP first
+  GitNexus wrapper fallback
+  Linear / GitHub / file tracker
+  agent-browser
+  focused source search
 ```
 
 ## Execution State Machine
 
-```mermaid
-stateDiagram-v2
-  [*] --> Orient
-  Orient --> SelectMode: read profile + repo rules
-  SelectMode --> Manifest: meaningful code slice
-  SelectMode --> DirectFix: tiny slice
-  Manifest --> Route: owner, contracts, no-touch
-  Route --> Impact: MCP/GitNexus/search
-  Impact --> Edit: risk accepted
-  Edit --> Verify: focused checks
-  Verify --> DetectScope: manifest file list
-  DetectScope --> FinishPacket
-  DirectFix --> Verify
-  FinishPacket --> [*]
+```text
+[user task]
+    |
+    v
+[1. orient]
+    read AGENTS.md, apex.workflow.json, authority docs
+    |
+    v
+[2. select mode]
+    tiny | route-local | shared-surface | issue-resume | planning | reconciliation
+    |
+    |-- tiny known fix -------------------------------+
+    |                                                |
+    v                                                |
+[3. open slice manifest]                             |
+    owned files, no-touch surfaces, checks           |
+    |                                                |
+    v                                                |
+[4. route before edit]                               |
+    owner docs, contracts, state, callers            |
+    |                                                |
+    v                                                |
+[5. impact check]                                    |
+    GitNexus MCP -> wrapper fallback -> search       |
+    |                                                |
+    v                                                |
+[6. edit]                                            |
+    narrow implementation inside declared scope      |
+    |                                                |
+    v                                                v
+[7. verify] <-------------------------------- [direct fix]
+    path-scoped tests, lint/typecheck/build/browser evidence when relevant
+    |
+    v
+[8. detect scope]
+    compare changed files and affected flows against the manifest
+    |
+    v
+[9. finish packet]
+    landed, verified, not verified, risks, next safe slice
 ```
 
 ## Install
@@ -222,4 +243,3 @@ npm run self-check
 ## The Philosophy
 
 Apex does not try to make agents autonomous by removing process. It makes them effective by giving them the process a senior engineer would enforce anyway: read the repo, choose the smallest safe mode, respect contracts, prove the slice, and leave the next agent a clean trail.
-
