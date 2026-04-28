@@ -105,3 +105,33 @@ It checks unresolved installer review items, guessed inferred paths,
 `tmp/apex-workflow/` ignore coverage, the managed `AGENTS.md` block, configured
 adapter readiness, the skill symlink, and whether setup files have a clean git
 baseline.
+
+## Manifest Evidence
+
+`manifest.defaultDir` should match the artifact's intended durability. Use a
+committed docs/proof directory for reviewer evidence, or keep `tmp/apex-workflow`
+only when the target repo intentionally treats selected tmp manifests as
+durable artifacts.
+
+Use `apex-manifest run-check` to record command results into the manifest:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+  run-check \
+  --config=apex.workflow.json \
+  --slug=<slice> \
+  --cmd="npm test"
+```
+
+Use `apex-manifest close` for generic slice closeout:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+  close \
+  --config=apex.workflow.json \
+  --slug=<slice> \
+  --next=none
+```
+
+`close` runs detect, required manifest checks, `git diff --check`, records the
+results in `checks.runs`, and prints a finish packet from recorded evidence.

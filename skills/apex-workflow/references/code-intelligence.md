@@ -41,7 +41,8 @@ When no graph tool is configured:
 1. Use focused source search for owners and callers.
 2. Read contracts before editing shared behavior.
 3. Treat shared stores, shells, auth, and route owners as higher risk even without graph output.
-4. Record the fallback in the manifest.
+4. Run `apex-manifest detect` anyway. The helper performs built-in changed-file coverage when no `detectCommand` exists.
+5. Record the fallback in the manifest.
 
 ## Detect Changes
 
@@ -49,3 +50,7 @@ Prefer manifest-owned files over broad dirty-tree analysis.
 
 Broad dirty-tree output is branch context. It is not proof that the current
 slice stayed inside scope.
+
+When `codeIntelligence.detectCommand` is missing, `apex-manifest detect` checks
+the current dirty tree against `ownedFiles`. Changed files outside the current
+manifest fail the detect step unless they are the manifest artifact itself.

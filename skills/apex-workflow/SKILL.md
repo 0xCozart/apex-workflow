@@ -122,6 +122,11 @@ node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
   --slug=<slice>
 ```
 
+Run this immediately after creating the manifest and before implementation.
+If no repo-specific `detectCommand` is configured, the helper still runs
+built-in coverage: manifest schema, dirty changed files versus `ownedFiles`,
+the manifest artifact exception, and missing-owned-file warnings.
+
 ## Routing Rules
 
 - `tiny`: skip broad routing unless ownership is unclear.
@@ -173,6 +178,30 @@ node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
   --next="<next safe slice>"
 ```
 
+Prefer recording checks into the manifest instead of only listing commands:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+  run-check \
+  --config=apex.workflow.json \
+  --slug=<slice> \
+  --cmd="<verification command>"
+```
+
+At the end of a slice, use `close` when the target repo can run the manifest's
+required commands:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+  close \
+  --config=apex.workflow.json \
+  --slug=<slice> \
+  --next="<next safe slice>"
+```
+
+`close` runs detect, records required check results, records `git diff --check`,
+and prints the finish packet.
+
 ## Common Mistakes
 
 - copying one app's product rules into the generic skill
@@ -181,5 +210,6 @@ node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
 - editing shared surfaces before reading contracts
 - running broad dirty-tree analysis and calling it slice proof
 - creating a manifest and leaving defaults like empty `ownedFiles` or `checks.typecheck: TODO`; `detect` will fail until current-slice files and required/skip check dispositions are explicit
+- listing verification commands without recording whether they actually ran
 - treating browser screenshots as visual signoff when the profile says functional-only
 - finishing without a manifest-backed scope and verification summary

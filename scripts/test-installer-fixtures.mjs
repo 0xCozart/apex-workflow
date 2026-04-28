@@ -80,6 +80,48 @@ function testNoAdaptersDoctor(root) {
   ]);
 
   run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "new",
+    "--config=apex.workflow.json",
+    "--slug=fixture-slice",
+    "--issue=none",
+    "--mode=tiny",
+    "--surface=product doc",
+    "--files=PRODUCT.md",
+    "--downshift=tiny: one known fixture doc",
+    "--browser=skip: docs only",
+    "--typecheck=skip: fixture docs only",
+    "--required=node --version",
+  ], { cwd: target });
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "detect",
+    "--config=apex.workflow.json",
+    "--slug=fixture-slice",
+    "--write",
+  ], { cwd: target });
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "close",
+    "--config=apex.workflow.json",
+    "--slug=fixture-slice",
+    "--next=none",
+  ], { cwd: target });
+
+  const manifest = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/fixture-slice.json"), "utf8"));
+  assert(manifest.codeIntelligence.detect?.provider === "built-in", "detect result should be recorded");
+  assert(
+    manifest.checks.runs.some((entry) => entry.command === "node --version" && entry.status === "passed"),
+    "required check run should be recorded",
+  );
+  assert(
+    manifest.checks.runs.some((entry) => entry.command === "git diff --check" && entry.status === "passed"),
+    "close should record git diff --check",
+  );
+
+  run([
     join(APEX_ROOT, "scripts/check-config.mjs"),
     "--config=profiles/service-desk.workflow.json",
     `--target=${target}`,

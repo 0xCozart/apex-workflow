@@ -92,10 +92,12 @@ APEX WORKFLOW CONTROL PLANE
     v                                                v
 [7. verify] <-------------------------------- [direct fix]
     path-scoped tests, lint/typecheck/build/browser evidence when relevant
+    record command results into the manifest
     |
     v
 [8. detect scope]
     compare changed files and affected flows against the manifest
+    built-in dirty-file coverage if no graph detect is configured
     |
     v
 [9. finish packet]
@@ -220,6 +222,37 @@ npm run manifest -- new \
   --surface="ticket detail route" \
   --downshift="route-local: one owner and focused checks cover this slice"
 ```
+
+Run detect immediately after manifest creation. This catches wrong schema,
+placeholder fields, missing required check disposition, and dirty files outside
+the manifest before implementation starts:
+
+```bash
+npm run manifest -- detect \
+  --config=apex.workflow.json \
+  --slug=app-123-thing
+```
+
+Record checks as executable evidence:
+
+```bash
+npm run manifest -- run-check \
+  --config=apex.workflow.json \
+  --slug=app-123-thing \
+  --cmd="npm test"
+```
+
+Close a slice with the generic control-plane path:
+
+```bash
+npm run manifest -- close \
+  --config=apex.workflow.json \
+  --slug=app-123-thing \
+  --next="APP-124"
+```
+
+`close` runs detect, runs and records required manifest checks, records
+`git diff --check`, and prints the finish packet.
 
 Generate a handoff packet from the manifest:
 
