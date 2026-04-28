@@ -301,6 +301,15 @@ apex-manifest close \
   --next="APP-124"
 ```
 
+Preview close commands before running them:
+
+```bash
+apex-manifest close \
+  --config=apex.workflow.json \
+  --slug=app-123-thing \
+  --preview-commands
+```
+
 `close` runs detect, runs and records required manifest checks, records
 `git diff --check`, and prints the finish packet. With
 `dirtyPolicy=owned-files-only`, the diff check is scoped to `ownedFiles`; if no

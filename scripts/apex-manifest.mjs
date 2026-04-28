@@ -18,6 +18,7 @@ Usage:
   node scripts/apex-manifest.mjs record-check --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --cmd="browser: manual QA" --status=skipped --note="no UI change"
   node scripts/apex-manifest.mjs record-evidence --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --kind=manual-terminal --summary="TUI flow exercised" --source="local terminal"
   node scripts/apex-manifest.mjs record-gitnexus-freshness --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --phase=pre-status --status=fresh --command="npm run gitnexus:status"
+  node scripts/apex-manifest.mjs close --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --next="APP-2" --preview-commands
   node scripts/apex-manifest.mjs close --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --next="APP-2" --allow-stale-evidence="reason when required checks were intentionally not rerun"
   node scripts/apex-manifest.mjs summary --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json
   node scripts/apex-manifest.mjs finish --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --verified="npm test" --next="APP-2"
@@ -979,6 +980,37 @@ function ownedDiffCheckCommand(manifest) {
   return `git diff --check -- ${files.map(shellQuote).join(" ")}`;
 }
 
+function closeCommandPlan(manifest, config, args = {}) {
+  const commands = [];
+  const detectCommand = config.codeIntelligence?.detectCommand;
+  if (detectCommand) {
+    commands.push({
+      command: detectCommand.replaceAll("{changedFilesFile}", "<changedFilesFile>"),
+      commandSource: "detect-command",
+    });
+  }
+  if (!args["skip-required"]) {
+    for (const command of manifest.checks?.required ?? []) {
+      commands.push({ command, commandSource: "close-required" });
+    }
+  }
+  const dirtyPolicy = dirtyPolicyFor(manifest, args);
+  const diffCommand = dirtyPolicy === "owned-files-only" ? ownedDiffCheckCommand(manifest) : "git diff --check";
+  commands.push({
+    command: diffCommand ?? "git diff --check",
+    commandSource: "close-diff",
+    status: diffCommand ? "will-run" : "will-skip",
+  });
+  return commands;
+}
+
+function commandPreviewClose(manifest, config, args = {}) {
+  console.log("[apex-manifest] close command preview");
+  for (const entry of closeCommandPlan(manifest, config, args)) {
+    console.log(`- [${entry.commandSource}${entry.status ? `/${entry.status}` : ""}] ${entry.command}`);
+  }
+}
+
 function commandRunCheck(args, config) {
   const filePath = manifestPathFromArgs(args, config);
   const manifest = readManifest(filePath);
@@ -1024,6 +1056,10 @@ function commandClose(args, config) {
     console.error("[apex-manifest] GitNexus freshness gate failed; refusing close:");
     for (const failure of freshnessFailures) console.error(`- ${failure}`);
     process.exit(1);
+  }
+  if (args["preview-commands"]) {
+    commandPreviewClose(manifest, config, args);
+    return;
   }
 
   const detectResult = runDetect({ ...args, file: filePath, write: true, strict: true }, config, { write: true });

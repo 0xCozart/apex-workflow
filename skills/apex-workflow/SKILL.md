@@ -250,6 +250,9 @@ apex-manifest \
   --next="<next safe slice>"
 ```
 
+Use `--preview-commands` first when the command surface is unfamiliar or the
+profile came from an unreviewed source.
+
 `close` runs detect, records required check results, records `git diff --check`,
 and prints the finish packet.
 

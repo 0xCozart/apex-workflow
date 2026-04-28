@@ -237,6 +237,61 @@ function testStaleEvidenceDetection(root) {
   );
 }
 
+function testCommandPreviewAndPlaceholderFailure(root) {
+  const target = makeTarget(root, "no-adapters", "command-preview");
+  const skillDir = join(root, "skills-command-preview");
+  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"], skillDir);
+
+  assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["add", "."]).status === 0, "git add failed");
+  assert(
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    "git commit failed",
+  );
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "new",
+    "--config=apex.workflow.json",
+    "--slug=preview-slice",
+    "--issue=none",
+    "--mode=tiny",
+    "--surface=product doc",
+    "--files=PRODUCT.md",
+    "--downshift=tiny: command preview fixture",
+    "--browser=skip: docs only",
+    "--typecheck=skip: fixture docs only",
+    "--required=node --version",
+  ], { cwd: target });
+
+  const preview = run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "close",
+    "--config=apex.workflow.json",
+    "--slug=preview-slice",
+    "--preview-commands",
+  ], { cwd: target });
+  assert(preview.stdout.includes("close command preview"), "preview should print a command preview header");
+  assert(preview.stdout.includes("[close-required] node --version"), "preview should list required command");
+  assert(preview.stdout.includes("[close-diff/will-run] git diff --check"), "preview should list diff check");
+
+  const previewManifest = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/preview-slice.json"), "utf8"));
+  assert((previewManifest.checks.runs ?? []).length === 0, "preview should not run or record commands");
+
+  const unresolved = run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "run-check",
+    "--config=apex.workflow.json",
+    "--slug=preview-slice",
+    "--cmd=node {missingPlaceholder}",
+  ], { cwd: target, allowFailure: true });
+  assert(unresolved.status !== 0, "unresolved placeholders should fail before command execution");
+  assert(
+    `${unresolved.stdout}\n${unresolved.stderr}`.includes("unresolved placeholder"),
+    "unresolved placeholder failure should be explicit",
+  );
+}
+
 function testReconciliationOwnedFilesOnly(root) {
   const target = makeTarget(root, "no-adapters", "no-adapters-reconciliation");
   const skillDir = join(root, "skills-reconciliation");
@@ -634,6 +689,7 @@ function main() {
     mkdirSync(root, { recursive: true });
     testNoAdaptersDoctor(root);
     testStaleEvidenceDetection(root);
+    testCommandPreviewAndPlaceholderFailure(root);
     testReconciliationOwnedFilesOnly(root);
     testLinearGitNexusWrapper(root);
     testGitNexusFreshnessGate(root);
