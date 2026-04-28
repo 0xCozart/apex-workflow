@@ -24,6 +24,8 @@ const TEMPLATE_PATH = join(APEX_ROOT, "templates/apex.workflow.json");
 const SKILL_SOURCE = join(APEX_ROOT, "skills/apex-workflow");
 const START_MARKER = "<!-- apex-workflow:start -->";
 const END_MARKER = "<!-- apex-workflow:end -->";
+const GITIGNORE_START_MARKER = "# apex-workflow:start";
+const GITIGNORE_END_MARKER = "# apex-workflow:end";
 
 function usage(exitCode = 0) {
   const message = `
@@ -689,6 +691,36 @@ function upsertAgentsBlock(targetRoot, args) {
   return { skipped: false, path: agentsPath };
 }
 
+function makeGitignoreBlock() {
+  return `${GITIGNORE_START_MARKER}
+# Apex Workflow local artifacts
+tmp/apex-workflow/
+tmp/agent-browser/
+${GITIGNORE_END_MARKER}
+`;
+}
+
+function upsertGitignoreBlock(targetRoot, args) {
+  const gitignorePath = join(targetRoot, ".gitignore");
+  const existing = readTextIfExists(gitignorePath);
+  const block = makeGitignoreBlock();
+  let nextContent;
+
+  if (existing.includes(GITIGNORE_START_MARKER) && existing.includes(GITIGNORE_END_MARKER)) {
+    const pattern = new RegExp(`${GITIGNORE_START_MARKER}[\\s\\S]*?${GITIGNORE_END_MARKER}\\n?`, "m");
+    nextContent = existing.replace(pattern, block);
+  } else {
+    nextContent = existing.trimEnd();
+    nextContent = nextContent ? `${nextContent}\n\n${block}` : block;
+  }
+
+  if (!args["dry-run"]) {
+    writeFileSync(gitignorePath, nextContent);
+  }
+
+  return { path: gitignorePath };
+}
+
 function installSkillLink(args) {
   if (args["skip-skill-link"]) return { skipped: true, path: null };
 
@@ -819,6 +851,7 @@ function printSummary({ targetRoot, configPath, agentsResult, skillResult, dryRu
   console.log(`- profile: ${relative(targetRoot, configPath)}`);
   if (agentsResult.skipped) console.log("- AGENTS.md: skipped");
   else console.log(`- AGENTS.md: ${relative(targetRoot, agentsResult.path)}`);
+  console.log("- .gitignore: Apex local artifact block");
   if (skillResult.skipped) console.log("- skill link: skipped");
   else console.log(`- skill link: ${skillResult.path}${skillResult.alreadyInstalled ? " (already installed)" : ""}`);
   console.log("- next: use $apex-workflow in the target repo and read apex.workflow.json before selecting a mode");
@@ -848,6 +881,7 @@ async function main() {
   }
 
   const agentsResult = upsertAgentsBlock(targetRoot, args);
+  upsertGitignoreBlock(targetRoot, args);
   const skillResult = installSkillLink(args);
 
   if (!args["dry-run"]) validateGeneratedConfig(targetRoot);

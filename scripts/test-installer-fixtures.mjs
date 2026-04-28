@@ -57,6 +57,7 @@ function initHarness(target, args, skillDir) {
 function testNoAdaptersDoctor(root) {
   const target = makeTarget(root, "no-adapters");
   const skillDir = join(root, "skills");
+  rmSync(join(target, ".gitignore"), { force: true });
   initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"], skillDir);
 
   const config = readConfig(target);
@@ -64,8 +65,14 @@ function testNoAdaptersDoctor(root) {
   assert(config.codeIntelligence.provider === "focused-search", "no-adapters should use focused-search");
   assert(config.verification.browser.provider === "none", "no-adapters browser should be none");
   assert(readFileSync(join(target, "AGENTS.md"), "utf8").includes("<!-- apex-workflow:start -->"), "AGENTS managed block missing");
+  const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
+  assert(gitignore.includes("# apex-workflow:start"), "Apex .gitignore block missing");
+  assert(gitignore.includes("tmp/apex-workflow/"), "Apex manifest artifact ignore missing");
+  assert(gitignore.includes("tmp/agent-browser/"), "Apex browser artifact ignore missing");
 
   assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["check-ignore", "-q", "tmp/apex-workflow/fixture-slice.json"]).status === 0, "Apex manifest path should be ignored");
+  assert(git(target, ["check-ignore", "-q", "tmp/agent-browser/snapshot.json"]).status === 0, "Apex browser artifact path should be ignored");
   assert(git(target, ["add", "."]).status === 0, "git add failed");
   assert(
     git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
@@ -171,6 +178,10 @@ function testExistingAgentsManagedBlock(root) {
   assert(!agents.includes("old managed content"), "old managed block content should be replaced");
   assert((agents.match(/<!-- apex-workflow:start -->/g) ?? []).length === 1, "managed block should not duplicate");
   assert(agents.includes("Keep this repo-specific instruction."), "non-managed AGENTS content should be preserved");
+
+  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none", "--force"], skillDir);
+  const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
+  assert((gitignore.match(/# apex-workflow:start/g) ?? []).length === 1, ".gitignore managed block should not duplicate");
 }
 
 function testPathCasingMismatch(root) {
@@ -196,6 +207,7 @@ function testDryRunNoWrites(root) {
   assert(!existsSync(join(target, "apex.workflow.json")), "dry-run should not write apex.workflow.json");
   assert(!existsSync(join(target, "AGENTS.md")), "dry-run should not write AGENTS.md");
   assert(!existsSync(join(skillDir, "apex-workflow")), "dry-run should not create skill symlink");
+  assert(!readFileSync(join(target, ".gitignore"), "utf8").includes("# apex-workflow:start"), "dry-run should not update .gitignore");
 }
 
 function main() {
