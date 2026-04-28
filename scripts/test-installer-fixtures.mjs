@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -12,6 +13,10 @@ const FIXTURES_ROOT = join(APEX_ROOT, "fixtures/installer");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function sha256(value) {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
 function run(args, options = {}) {
@@ -140,6 +145,18 @@ function testNoAdaptersDoctor(root) {
     manifest.checks.runs.some((entry) => entry.command === "node --version" && entry.status === "passed"),
     "required check run should be recorded",
   );
+  const nodeRun = manifest.checks.runs.find((entry) => entry.command === "node --version" && entry.status === "passed");
+  assert(nodeRun.id, "run record should include id");
+  assert(nodeRun.commandSource === "close-required", "required close run should include command source");
+  assert(nodeRun.cwd === ".", "run record should include cwd");
+  assert(nodeRun.gitHead, "run record should include git head");
+  assert(nodeRun.gitStatusFingerprint?.startsWith("sha256:"), "run record should include git status fingerprint");
+  assert(nodeRun.ownedFilesFingerprint?.startsWith("sha256:"), "run record should include owned files fingerprint");
+  assert(nodeRun.logPath, "run record should include log path");
+  assert(nodeRun.logSha256?.startsWith("sha256:"), "run record should include log hash");
+  const nodeLog = readFileSync(join(target, nodeRun.logPath), "utf8");
+  assert(sha256(nodeLog) === nodeRun.logSha256, "run record logSha256 should match written log");
+  assert(nodeRun.stdoutTail.includes("v"), "run record should include stdout tail");
   assert(
     manifest.checks.runs.some((entry) => entry.command === "git diff --check" && entry.status === "passed"),
     "close should record git diff --check",
@@ -150,6 +167,74 @@ function testNoAdaptersDoctor(root) {
     "--config=profiles/service-desk.workflow.json",
     `--target=${target}`,
   ]);
+}
+
+function testStaleEvidenceDetection(root) {
+  const target = makeTarget(root, "no-adapters", "stale-evidence");
+  const skillDir = join(root, "skills-stale-evidence");
+  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"], skillDir);
+
+  assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["add", "."]).status === 0, "git add failed");
+  assert(
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    "git commit failed",
+  );
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "new",
+    "--config=apex.workflow.json",
+    "--slug=stale-evidence",
+    "--issue=none",
+    "--mode=tiny",
+    "--surface=product doc",
+    "--files=PRODUCT.md",
+    "--downshift=tiny: stale evidence fixture",
+    "--browser=skip: docs only",
+    "--typecheck=skip: fixture docs only",
+    "--required=node --version",
+  ], { cwd: target });
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "run-check",
+    "--config=apex.workflow.json",
+    "--slug=stale-evidence",
+    "--cmd=node --version",
+  ], { cwd: target });
+
+  writeFileSync(join(target, "PRODUCT.md"), "# Product\n\nChanged after evidence.\n");
+
+  const staleClose = run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "close",
+    "--config=apex.workflow.json",
+    "--slug=stale-evidence",
+    "--skip-required",
+    "--next=none",
+  ], { cwd: target, allowFailure: true });
+  assert(staleClose.status !== 0, "close should fail when skipped required evidence is stale");
+  assert(
+    `${staleClose.stdout}\n${staleClose.stderr}`.includes("stale required evidence"),
+    "stale evidence failure should explain the problem",
+  );
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "close",
+    "--config=apex.workflow.json",
+    "--slug=stale-evidence",
+    "--skip-required",
+    "--allow-stale-evidence=fixture intentionally reuses prior node version check",
+    "--next=none",
+  ], { cwd: target });
+
+  const manifest = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/stale-evidence.json"), "utf8"));
+  assert(
+    manifest.evidence?.some((entry) => entry.kind === "stale-evidence-override"),
+    "allow-stale-evidence should record an override evidence item",
+  );
 }
 
 function testReconciliationOwnedFilesOnly(root) {
@@ -548,6 +633,7 @@ function main() {
   try {
     mkdirSync(root, { recursive: true });
     testNoAdaptersDoctor(root);
+    testStaleEvidenceDetection(root);
     testReconciliationOwnedFilesOnly(root);
     testLinearGitNexusWrapper(root);
     testGitNexusFreshnessGate(root);

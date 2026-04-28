@@ -109,6 +109,10 @@ Record verification outcomes as they run:
 apex-manifest run-check --config=apex.workflow.json --slug=app-123-slice --cmd="npm test"
 ```
 
+Each command run stores a manifest record plus a hashed log file under
+`tmp/apex-workflow/logs/<slice>/`. Reviewers can inspect the manifest tails for
+quick context and open the log path for full captured stdout/stderr.
+
 Record manual terminal/TUI evidence separately from automated checks:
 
 ```bash

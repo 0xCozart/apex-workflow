@@ -258,6 +258,10 @@ apex-manifest run-check \
   --cmd="npm test"
 ```
 
+Command runs are recorded in `checks.runs` with command source, exit code,
+timestamps, cwd, git head, working-tree fingerprints, stdout/stderr tails, and
+a hashed log file under `tmp/apex-workflow/logs/<slice>/`.
+
 Record manual terminal, TUI, or operator evidence without pretending it was an
 automated check:
 
@@ -303,7 +307,8 @@ apex-manifest close \
 owned files are listed, it records a skipped diff-check entry instead of
 testing unrelated dirty work. For GitNexus-enabled non-tiny code slices, `close`
 also refuses to finish until the freshness gate has pre-slice and post-slice
-evidence.
+evidence. When required checks are skipped, `close` refuses stale check evidence
+unless `--allow-stale-evidence="<reason>"` is provided and recorded.
 
 Generate a handoff packet from the manifest:
 

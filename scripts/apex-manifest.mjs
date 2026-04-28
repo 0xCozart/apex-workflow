@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
 
 function usage(exitCode = 0) {
@@ -17,7 +18,7 @@ Usage:
   node scripts/apex-manifest.mjs record-check --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --cmd="browser: manual QA" --status=skipped --note="no UI change"
   node scripts/apex-manifest.mjs record-evidence --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --kind=manual-terminal --summary="TUI flow exercised" --source="local terminal"
   node scripts/apex-manifest.mjs record-gitnexus-freshness --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --phase=pre-status --status=fresh --command="npm run gitnexus:status"
-  node scripts/apex-manifest.mjs close --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --next="APP-2"
+  node scripts/apex-manifest.mjs close --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --next="APP-2" --allow-stale-evidence="reason when required checks were intentionally not rerun"
   node scripts/apex-manifest.mjs summary --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json
   node scripts/apex-manifest.mjs finish --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --verified="npm test" --next="APP-2"
 `;
@@ -97,6 +98,35 @@ function repoRelative(filePath) {
   return relative(process.cwd(), resolve(process.cwd(), filePath)).replace(/\\/g, "/");
 }
 
+function sha256(value) {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function redacted(value) {
+  let output = String(value ?? "");
+  for (const pattern of SECRET_PATTERNS) {
+    output = output.replace(pattern, (match, prefix) => `${prefix}[REDACTED]`);
+  }
+  return output;
+}
+
+function tail(value, limit = TAIL_LIMIT) {
+  const text = redacted(value);
+  return text.length > limit ? text.slice(text.length - limit) : text;
+}
+
+function timestampIdPart(date = new Date()) {
+  return date.toISOString().replace(/\D/g, "").slice(0, 17);
+}
+
+function slugFromManifestPath(filePath) {
+  return basename(String(filePath), ".json").replace(/[^A-Za-z0-9._-]/g, "-");
+}
+
+function logPathForRun(filePath, runId) {
+  return join("tmp/apex-workflow/logs", slugFromManifestPath(filePath), `${runId}.log`).replace(/\\/g, "/");
+}
+
 function normalizeStringArray(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -138,6 +168,19 @@ const DIRTY_POLICIES = new Set(["fail-unowned", "owned-files-only"]);
 const GITNEXUS_PROVIDERS = new Set(["gitnexus-mcp", "gitnexus-wrapper"]);
 const FRESHNESS_PHASES = new Set(["pre-status", "pre-refresh", "post-refresh", "post-skip"]);
 const FRESHNESS_STATUSES = new Set(["fresh", "stale", "missing", "unavailable", "refreshed", "skipped"]);
+const RUN_SOURCES = new Set([
+  "manifest-required",
+  "manual-run-check",
+  "manual-record-check",
+  "close-required",
+  "close-diff",
+  "detect-command",
+]);
+const SECRET_PATTERNS = [
+  /\b((?:API|ACCESS|AUTH|ID|REFRESH)?_?(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD))=([^\s"'`]+)/gi,
+  /\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi,
+];
+const TAIL_LIMIT = 4000;
 
 function defaultDirtyPolicy(mode) {
   return mode === "reconciliation" ? "owned-files-only" : "fail-unowned";
@@ -329,12 +372,20 @@ function runShell(command, options = {}) {
   };
 }
 
-function runDetectCommand(command, changedFilesFile) {
-  const rendered = command.replaceAll("{changedFilesFile}", changedFilesFile);
-  const result = runShell(rendered, { inherit: true });
+function validateRenderedCommand(command) {
+  const unresolved = String(command).match(/\{[^}]+\}/g);
+  if (unresolved) throw new Error(`command contains unresolved placeholder(s): ${unresolved.join(", ")}`);
+}
 
-  if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
+function runDetectCommand(manifest, manifestPath, command, changedFilesFile) {
+  const rendered = command.replaceAll("{changedFilesFile}", changedFilesFile);
+  validateRenderedCommand(rendered);
+  const status = runAndRecord(manifest, manifestPath, rendered, {
+    commandSource: "detect-command",
+    note: `changedFilesFile=${changedFilesFile}`,
+  });
+
+  return status;
 }
 
 function gitChangedFiles() {
@@ -363,6 +414,53 @@ function gitChangedFiles() {
     .filter(Boolean);
 
   return { available: true, files: [...new Set(files)], detail: "" };
+}
+
+function gitHead() {
+  const result = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  if (result.error || result.status !== 0) return null;
+  return result.stdout.trim() || null;
+}
+
+function gitStatusText(paths = []) {
+  const args = ["status", "--porcelain=v1"];
+  if (paths.length > 0) args.push("--", ...paths);
+  const result = spawnSync("git", args, {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  if (result.error || result.status !== 0) return "";
+  return result.stdout;
+}
+
+function gitStatusFingerprint(paths = []) {
+  return sha256(gitStatusText(paths));
+}
+
+function existingOwnedFiles(manifest) {
+  return normalizeStringArray(manifest.ownedFiles).filter((filePath) => existsSync(resolve(process.cwd(), filePath)));
+}
+
+function fingerprintPath(filePath) {
+  const absolute = resolve(process.cwd(), filePath);
+  const stats = statSync(absolute);
+  if (stats.isDirectory()) {
+    const children = readdirSync(absolute)
+      .sort()
+      .flatMap((entry) => fingerprintPath(join(filePath, entry)));
+    return [`dir:${filePath}`, ...children];
+  }
+  if (!stats.isFile()) return [`other:${filePath}`];
+  return [`file:${filePath}:${sha256(readFileSync(absolute))}`];
+}
+
+function ownedFilesFingerprint(manifest) {
+  const files = existingOwnedFiles(manifest);
+  const entries = files.flatMap((filePath) => fingerprintPath(filePath));
+  return sha256(entries.join("\n"));
 }
 
 function builtInDetect(manifest, manifestPath, args = {}) {
@@ -462,8 +560,15 @@ function runDetect(args, config, options = {}) {
     return { ok: true, status: 0, manifest, filePath, failures: [] };
   }
 
-  runDetectCommand(detectCommand, outputPath);
-  return { ok: builtInResult.ok, status: builtInResult.ok ? 0 : 1, manifest, filePath, failures: builtInResult.failures };
+  const detectStatus = runDetectCommand(manifest, filePath, detectCommand, outputPath);
+  writeManifest(filePath, manifest);
+  return {
+    ok: builtInResult.ok && detectStatus === 0,
+    status: builtInResult.ok && detectStatus === 0 ? 0 : detectStatus || 1,
+    manifest,
+    filePath,
+    failures: builtInResult.failures,
+  };
 }
 
 function commandDetect(args, config) {
@@ -624,16 +729,59 @@ function ensureRuns(manifest) {
   if (!Array.isArray(manifest.checks.runs)) manifest.checks.runs = [];
 }
 
-function makeRunRecord(command, status, exitCode, startedAt, durationMs, note = "") {
+function makeRunRecord(manifest, manifestPath, command, status, exitCode, startedAt, finishedAt, durationMs, options = {}) {
+  const commandSource = String(options.commandSource ?? "manual-record-check");
+  if (!RUN_SOURCES.has(commandSource)) {
+    throw new Error(`commandSource must be one of: ${[...RUN_SOURCES].join(", ")}`);
+  }
   return {
+    id: String(options.id ?? nextRunId(manifest)),
     command,
+    commandSource,
     status,
     exitCode,
     startedAt,
-    finishedAt: new Date().toISOString(),
+    finishedAt,
     durationMs,
-    note,
+    cwd: ".",
+    shell: true,
+    gitHead: gitHead(),
+    gitStatusFingerprint: gitStatusFingerprint(),
+    ownedFilesFingerprint: ownedFilesFingerprint(manifest),
+    stdoutTail: tail(options.stdout ?? ""),
+    stderrTail: tail(options.stderr ?? ""),
+    logPath: options.logPath ?? null,
+    logSha256: options.logSha256 ?? null,
+    note: String(options.note ?? ""),
   };
+}
+
+function nextRunId(manifest) {
+  const existing = checkRuns(manifest).length + 1;
+  return `run-${timestampIdPart()}-${String(existing).padStart(3, "0")}`;
+}
+
+function writeRunLog(logPath, record, stdout, stderr) {
+  const absolute = resolve(process.cwd(), logPath);
+  mkdirSync(dirname(absolute), { recursive: true });
+  const body = [
+    `id: ${record.id}`,
+    `commandSource: ${record.commandSource}`,
+    `command: ${record.command}`,
+    `cwd: ${record.cwd}`,
+    `startedAt: ${record.startedAt}`,
+    `finishedAt: ${record.finishedAt}`,
+    `exitCode: ${record.exitCode ?? ""}`,
+    "",
+    "## stdout",
+    redacted(stdout),
+    "",
+    "## stderr",
+    redacted(stderr),
+    "",
+  ].join("\n");
+  writeFileSync(absolute, body);
+  return sha256(body);
 }
 
 function appendRun(manifest, record) {
@@ -744,13 +892,63 @@ function validateGitNexusFreshnessForClose(manifest, config) {
   return failures;
 }
 
-function runAndRecord(manifest, command, args = {}) {
+function latestPassedRun(manifest, command) {
+  return [...checkRuns(manifest)].reverse().find((run) => run.command === command && run.status === "passed");
+}
+
+function validateRequiredEvidenceFreshness(manifest, args = {}) {
+  const failures = [];
+  const required = normalizeStringArray(manifest.checks?.required);
+  if (required.length === 0) return failures;
+  const currentOwned = ownedFilesFingerprint(manifest);
+
+  for (const command of required) {
+    const run = latestPassedRun(manifest, command);
+    if (!run) {
+      failures.push(`required check has no passing evidence: ${command}`);
+      continue;
+    }
+    if (run.ownedFilesFingerprint !== currentOwned) {
+      failures.push(`required check evidence is stale: ${command}`);
+    }
+  }
+
+  if (failures.length > 0 && args["allow-stale-evidence"]) {
+    appendEvidence(manifest, {
+      kind: "stale-evidence-override",
+      summary: String(args["allow-stale-evidence"]),
+      source: "apex-manifest close",
+      note: failures.join("; "),
+      recordedAt: new Date().toISOString(),
+    });
+    return [];
+  }
+
+  return failures;
+}
+
+function runAndRecord(manifest, manifestPath, command, args = {}) {
+  validateRenderedCommand(command);
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
-  const result = runShell(command, { inherit: true });
+  const result = runShell(command, { inherit: false });
+  const finishedAt = new Date().toISOString();
   const durationMs = Date.now() - started;
   const status = result.status === 0 ? "passed" : "failed";
-  appendRun(manifest, makeRunRecord(command, status, result.status, startedAt, durationMs, args.note ?? ""));
+  const runId = nextRunId(manifest);
+  const logPath = logPathForRun(manifestPath, runId);
+  const record = makeRunRecord(manifest, manifestPath, command, status, result.status, startedAt, finishedAt, durationMs, {
+    id: runId,
+    commandSource: args.commandSource ?? "manual-run-check",
+    stdout: result.stdout,
+    stderr: result.stderr,
+    logPath,
+    note: args.note ?? "",
+  });
+  record.logSha256 = writeRunLog(logPath, record, result.stdout, result.stderr);
+  appendRun(manifest, record);
+  console.log(`[apex-manifest] ${status}: ${command} (${logPath})`);
+  if (result.stderr && status === "failed") console.error(tail(result.stderr, 1200));
   return result.status;
 }
 
@@ -786,7 +984,7 @@ function commandRunCheck(args, config) {
   const manifest = readManifest(filePath);
   const command = args.cmd ?? args.command;
   if (!command) throw new Error("--cmd is required");
-  const status = runAndRecord(manifest, String(command), args);
+  const status = runAndRecord(manifest, filePath, String(command), { ...args, commandSource: "manual-run-check" });
   writeManifest(filePath, manifest);
   process.exit(status);
 }
@@ -796,10 +994,18 @@ function commandRecordCheck(args, config) {
   const manifest = readManifest(filePath);
   const command = args.cmd ?? args.command;
   if (!command) throw new Error("--cmd is required");
+  validateRenderedCommand(String(command));
   const status = String(args.status ?? "passed");
   if (!["passed", "failed", "skipped"].includes(status)) throw new Error("--status must be passed, failed, or skipped");
   const exitCode = status === "passed" ? 0 : status === "failed" ? Number(args["exit-code"] ?? 1) : null;
-  appendRun(manifest, makeRunRecord(String(command), status, exitCode, new Date().toISOString(), 0, String(args.note ?? "")));
+  const now = new Date().toISOString();
+  appendRun(
+    manifest,
+    makeRunRecord(manifest, filePath, String(command), status, exitCode, now, now, 0, {
+      commandSource: "manual-record-check",
+      note: String(args.note ?? ""),
+    }),
+  );
   writeManifest(filePath, manifest);
   console.log(`[apex-manifest] recorded ${status}: ${command}`);
 }
@@ -828,16 +1034,25 @@ function commandClose(args, config) {
 
   if (!args["skip-required"]) {
     for (const command of manifest.checks?.required ?? []) {
-      const status = runAndRecord(manifest, command, args);
+      const status = runAndRecord(manifest, filePath, command, { ...args, commandSource: "close-required" });
       writeManifest(filePath, manifest);
       if (status !== 0) hadFailure = true;
       if (status !== 0 && !args["keep-going"]) process.exit(status);
     }
   }
 
+  const staleEvidenceFailures = validateRequiredEvidenceFreshness(manifest, args);
+  writeManifest(filePath, manifest);
+  if (staleEvidenceFailures.length > 0) {
+    console.error("[apex-manifest] stale required evidence; refusing close:");
+    for (const failure of staleEvidenceFailures) console.error(`- ${failure}`);
+    console.error("- rerun required checks or pass --allow-stale-evidence=<reason>");
+    process.exit(1);
+  }
+
   const diffCommand = dirtyPolicy === "owned-files-only" ? ownedDiffCheckCommand(manifest) : "git diff --check";
   if (diffCommand) {
-    const diffStatus = runAndRecord(manifest, diffCommand, args);
+    const diffStatus = runAndRecord(manifest, filePath, diffCommand, { ...args, commandSource: "close-diff" });
     writeManifest(filePath, manifest);
     if (diffStatus !== 0) hadFailure = true;
     if (diffStatus !== 0 && !args["keep-going"]) process.exit(diffStatus);
@@ -845,12 +1060,18 @@ function commandClose(args, config) {
     appendRun(
       manifest,
       makeRunRecord(
+        manifest,
+        filePath,
         "git diff --check",
         "skipped",
         null,
         new Date().toISOString(),
+        new Date().toISOString(),
         0,
-        "dirtyPolicy=owned-files-only and no ownedFiles were listed",
+        {
+          commandSource: "close-diff",
+          note: "dirtyPolicy=owned-files-only and no ownedFiles were listed",
+        },
       ),
     );
     writeManifest(filePath, manifest);

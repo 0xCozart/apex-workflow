@@ -202,6 +202,12 @@ apex-manifest \
   --cmd="<verification command>"
 ```
 
+Recorded command runs include command source, exit code, timestamps, cwd, git
+metadata, working-tree fingerprints, stdout/stderr tails, and a hashed
+repo-local log path under `tmp/apex-workflow/logs/<slice>/`. If required checks
+are skipped at close, stale evidence must be rerun or explicitly overridden
+with `--allow-stale-evidence="<reason>"`.
+
 For manual terminal, TUI, or operator evidence, record evidence instead of
 pretending it was an automated check:
 

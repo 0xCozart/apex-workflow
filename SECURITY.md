@@ -46,5 +46,5 @@ Secrets should never be stored in:
 - finish packets
 - copied terminal output
 
-Future audit-grade log capture must redact common secret-like values, cap output
-tails, and avoid recording environment dumps by default.
+Manifest command logs redact common secret-like values and cap manifest output
+tails. Apex does not record environment dumps by default.
