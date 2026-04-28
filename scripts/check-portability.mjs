@@ -6,10 +6,13 @@ import process from "node:process";
 
 const ROOT = process.cwd();
 const SCAN_ROOTS = [
+  ".github",
   "AGENTS.md",
   "README.md",
   "docs",
+  "fixtures",
   "package.json",
+  "package-lock.json",
   "profiles",
   "schemas",
   "scripts",
