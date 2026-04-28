@@ -11,6 +11,14 @@ Use this skill when a repo wants Minty-grade rigor without Minty-specific names.
 The app profile is the source of app-specific truth. The skill supplies the
 workflow kernel.
 
+## Trust Boundary
+
+Apex profiles and manifests are trusted executable workflow configuration.
+Commands declared in the profile, manifest, or CLI arguments may be run by
+`apex-manifest`, `apex-doctor`, and adapter fallbacks. Do not run Apex against
+untrusted profiles, manifests, or repositories without reviewing the commands
+first. Do not store secrets in profiles, manifests, logs, or finish packets.
+
 ## Read First
 
 1. Find the workflow profile:

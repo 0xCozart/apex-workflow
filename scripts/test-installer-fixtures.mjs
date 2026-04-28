@@ -92,12 +92,16 @@ function testNoAdaptersDoctor(root) {
     "git commit failed",
   );
 
-  run([
+  const doctor = run([
     join(APEX_ROOT, "scripts/apex-doctor.mjs"),
     `--target=${target}`,
     `--skill-dir=${skillDir}`,
     "--skip-commands",
   ]);
+  assert(
+    doctor.stdout.includes("executable trust boundary"),
+    "doctor should warn about trusted executable command configuration",
+  );
 
   run([
     join(APEX_ROOT, "scripts/apex-manifest.mjs"),
@@ -487,6 +491,17 @@ function testPortabilityScan() {
   assert(result.stdout.includes("[apex-portability] ok"), "portability scan should pass");
 }
 
+function testTrustModelDocs() {
+  assert(existsSync(join(APEX_ROOT, "SECURITY.md")), "SECURITY.md should document the trust model");
+  const security = readFileSync(join(APEX_ROOT, "SECURITY.md"), "utf8");
+  assert(security.includes("trusted executable workflow configuration"), "SECURITY.md should name executable trust boundary");
+  assert(security.includes("Do not run Apex against untrusted profiles"), "SECURITY.md should warn about untrusted profiles");
+  const readme = readFileSync(join(APEX_ROOT, "README.md"), "utf8");
+  assert(readme.includes("[SECURITY.md](SECURITY.md)"), "README should link SECURITY.md");
+  const skill = readFileSync(join(APEX_ROOT, "skills/apex-workflow/SKILL.md"), "utf8");
+  assert(skill.includes("trusted executable workflow configuration"), "skill should describe trust boundary");
+}
+
 function main() {
   mkdirSync(join(APEX_ROOT, "tmp"), { recursive: true });
   const root = mkdtempSync(join(APEX_ROOT, "tmp/apex-installer-fixtures-"));
@@ -502,6 +517,7 @@ function main() {
     testDryRunNoWrites(root);
     testPortableCliEntrypoints(root);
     testPortabilityScan();
+    testTrustModelDocs();
     console.log("[apex-fixtures] ok");
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -11,6 +11,8 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const APEX_ROOT = resolve(SCRIPT_DIR, "..");
 const START_MARKER = "<!-- apex-workflow:start -->";
 const END_MARKER = "<!-- apex-workflow:end -->";
+const COMMAND_KEY_PATTERN = /(?:^|\.)(?:.*Command|.*Commands|detectCommand|statusCommand|refreshCommand|queryCommand|contextCommand|impactCommand|checkCommand)$/;
+const SUSPICIOUS_SHELL_PATTERN = /(?:&&|\|\||;|`|\$\(|\|)/;
 
 function usage(exitCode = 0) {
   const message = `
@@ -70,6 +72,46 @@ function collectGuessedPaths(value, prefix = "setup.inferredPaths") {
     ...current,
     ...Object.entries(value).flatMap(([key, entry]) => collectGuessedPaths(entry, `${prefix}.${key}`)),
   ];
+}
+
+function isCommandPath(path) {
+  return COMMAND_KEY_PATTERN.test(path.replace(/\[\d+\]/g, ""));
+}
+
+function collectStringEntries(value, prefix = "") {
+  if (typeof value === "string") return [{ path: prefix, value }];
+  if (!value || typeof value !== "object") return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) => collectStringEntries(entry, `${prefix}[${index}]`));
+  }
+  return Object.entries(value).flatMap(([key, entry]) => collectStringEntries(entry, prefix ? `${prefix}.${key}` : key));
+}
+
+function checkTrustBoundary(checks, config) {
+  const strings = collectStringEntries(config);
+  const commandEntries = strings.filter((entry) => isCommandPath(entry.path) && entry.value.trim() !== "");
+  if (commandEntries.length > 0) {
+    add(
+      checks,
+      "warn",
+      "executable trust boundary",
+      `${commandEntries.length} configured command value(s); review SECURITY.md before running untrusted profiles or manifests`,
+    );
+  } else {
+    add(checks, "pass", "executable trust boundary", "no configured command values found");
+  }
+
+  const suspicious = strings.filter((entry) => !isCommandPath(entry.path) && SUSPICIOUS_SHELL_PATTERN.test(entry.value));
+  if (suspicious.length > 0) {
+    add(
+      checks,
+      "warn",
+      "suspicious non-command strings",
+      suspicious.map((entry) => entry.path).slice(0, 8).join("; "),
+    );
+  } else {
+    add(checks, "pass", "suspicious non-command strings", "none found");
+  }
 }
 
 function checkGitignored(targetRoot, pathToCheck) {
@@ -215,6 +257,7 @@ function main() {
 
   const config = readJson(configPath);
   runConfigCheck(checks, configPath, targetRoot);
+  checkTrustBoundary(checks, config);
 
   const reviewNeeded = config.setup?.reviewNeeded ?? [];
   if (reviewNeeded.length === 0) add(checks, "pass", "setup.reviewNeeded", "no unresolved installer review items");

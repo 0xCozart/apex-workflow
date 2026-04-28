@@ -21,6 +21,13 @@ They search before reading the authority chain. They edit shared surfaces as if 
 
 Apex is the antidote: a portable workflow harness that makes the agent follow the repo's actual operating model.
 
+## Trust Model
+
+Apex profiles and manifests are trusted executable workflow configuration. Some
+Apex commands run shell commands declared in the profile, manifest, or CLI
+arguments. Read [SECURITY.md](SECURITY.md) before installing Apex into an
+unfamiliar repository or running manifests from another source.
+
 ## Architecture
 
 ```text
