@@ -120,6 +120,9 @@ From the Apex repo, make the local CLI shims available during development:
 npm link
 ```
 
+First-time adopters can follow the no-service path in
+[docs/quickstart.md](docs/quickstart.md).
+
 Ask the agent installing Apex one setup question:
 
 ```text

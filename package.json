@@ -10,7 +10,7 @@
     "apex-check-config": "scripts/check-config.mjs"
   },
   "scripts": {
-    "check:syntax": "node --check scripts/init-harness.mjs && node --check scripts/apex-doctor.mjs && node --check scripts/apex-manifest.mjs && node --check scripts/check-config.mjs && node --check scripts/check-portability.mjs && node --check scripts/test-installer-fixtures.mjs",
+    "check:syntax": "node --check scripts/init-harness.mjs && node --check scripts/apex-doctor.mjs && node --check scripts/apex-manifest.mjs && node --check scripts/check-config.mjs && node --check scripts/check-portability.mjs && node --check scripts/demo-smoke.mjs && node --check scripts/test-installer-fixtures.mjs",
     "check:portability": "node scripts/check-portability.mjs",
     "check:config": "node scripts/check-config.mjs --config=profiles/service-desk.workflow.json --target=fixtures/config/service-desk",
     "check:minty": "node -e \"if (!process.env.MINTY_TARGET) { console.error('MINTY_TARGET is required for check:minty'); process.exit(1); }\" && node scripts/check-config.mjs --config=profiles/minty.workflow.json --target=\"$MINTY_TARGET\"",
@@ -18,7 +18,8 @@
     "init": "node scripts/init-harness.mjs",
     "manifest": "node scripts/apex-manifest.mjs",
     "test:fixtures": "node scripts/test-installer-fixtures.mjs",
-    "self-check": "npm run check:syntax && npm run check:portability && npm run check:config && npm run test:fixtures"
+    "test:demo": "node scripts/demo-smoke.mjs",
+    "self-check": "npm run check:syntax && npm run check:portability && npm run check:config && npm run test:fixtures && npm run test:demo"
   },
   "dependencies": {
     "ajv": "8.20.0"
