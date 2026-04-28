@@ -33,6 +33,14 @@ The installer will:
 - print a post-install report with inferred path confidence, adapter choices, repo dirty state, and next checkpoint guidance
 - symlink the local `apex-workflow` skill unless `--skip-skill-link` is passed
 
+Run the doctor before the first implementation slice:
+
+```bash
+npm run doctor -- --target=/path/to/app --config=apex.workflow.json
+```
+
+Treat failures as setup work, not product implementation work.
+
 ## 2. Profile Review
 
 After install, review `apex.workflow.json`. The profile must answer:
@@ -56,6 +64,13 @@ For GitNexus, prefer `codeIntelligence.provider = "gitnexus-mcp"`. Use the
 wrapper fallback only when MCP is unavailable or unreliable in the target
 environment.
 
+Review `codeIntelligence.availability` separately from `provider`:
+
+- `configuredPreference`: what the profile wants agents to use
+- `detectedRepoSupport`: what install-time repo evidence found
+- `currentHostAvailability`: whether this host/session has proven the MCP tools are visible
+- `fallbackCommandReadiness`: whether wrapper commands are configured
+
 If the installer could not infer product truth, contract docs, or broad-search
 orientation, it records that in `setup.reviewNeeded`.
 
@@ -64,6 +79,18 @@ case mismatches such as `docs/ARCHITECTURE.md` when the real file is
 `docs/architecture.md`.
 
 If the install report says `baseline checkpoint: commit AGENTS.md/apex.workflow.json setup before the first implementation slice`, do that before starting product code. Mixing harness bootstrap with implementation weakens the first manifest and finish packet.
+
+Create manifests by slug so `manifest.defaultDir` owns the artifact location:
+
+```bash
+npm run manifest -- new --config=apex.workflow.json --slug=app-123-slice ...
+```
+
+Finish with a generated packet:
+
+```bash
+npm run manifest -- finish --config=apex.workflow.json --slug=app-123-slice ...
+```
 
 ## 3. Repo Rules
 

@@ -1,0 +1,3 @@
+# Product
+
+Fixture product authority.

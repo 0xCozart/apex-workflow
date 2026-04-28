@@ -357,6 +357,12 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
   if (requested === "focused-search" || (requested === "auto" && !hasGitNexus)) {
     return {
       provider: "focused-search",
+      availability: {
+        configuredPreference: "focused-search",
+        detectedRepoSupport: "not-required",
+        currentHostAvailability: "not-required",
+        fallbackCommandReadiness: "not-required",
+      },
       mcp: null,
       wrapperFallback: null,
       statusCommand: null,
@@ -372,6 +378,12 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
   if (requested === "gitnexus-wrapper") {
     return {
       provider: "gitnexus-wrapper",
+      availability: {
+        configuredPreference: "gitnexus-wrapper",
+        detectedRepoSupport: hasGitNexus ? "detected" : "requested-without-detected-repo-support",
+        currentHostAvailability: "not-required",
+        fallbackCommandReadiness: wrapperFallback.enabled ? "configured" : "missing",
+      },
       mcp: {
         preferred: false,
         install: "Install GitNexus as MCP when possible, but this profile is pinned to the wrapper because the target repo requested it.",
@@ -392,6 +404,12 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
 
   return {
     provider: "gitnexus-mcp",
+    availability: {
+      configuredPreference: "gitnexus-mcp",
+      detectedRepoSupport: hasGitNexus ? "detected" : "requested-without-detected-repo-support",
+      currentHostAvailability: "unknown-until-agent-session-verifies-mcp-tools",
+      fallbackCommandReadiness: wrapperFallback.enabled ? "configured" : "missing",
+    },
     mcp: {
       preferred: true,
       install:
@@ -760,6 +778,12 @@ function printInstallReport({ config, targetRoot, dryRun }) {
   console.log(`- config mode: ${config.setup?.configMode ?? "unknown"}`);
   console.log(`- tracker: ${config.tracker.provider}${config.tracker.project ? ` / ${config.tracker.project}` : ""}`);
   console.log(`- code intelligence: ${config.codeIntelligence.provider}`);
+  if (config.codeIntelligence.availability) {
+    console.log(`  - configured preference: ${config.codeIntelligence.availability.configuredPreference}`);
+    console.log(`  - repo support: ${config.codeIntelligence.availability.detectedRepoSupport}`);
+    console.log(`  - host availability: ${config.codeIntelligence.availability.currentHostAvailability}`);
+    console.log(`  - fallback readiness: ${config.codeIntelligence.availability.fallbackCommandReadiness}`);
+  }
   console.log(`- browser: ${config.verification.browser.provider}`);
   console.log(`- git status: ${gitStatus.summary}`);
 

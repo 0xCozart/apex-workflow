@@ -51,7 +51,15 @@ When the user asks to install Apex Workflow from a GitHub repo or local clone:
    - `--browser=auto|none|agent-browser`
 5. Confirm that `apex.workflow.json` validates and that the target `AGENTS.md`
    has the managed Apex block.
-6. Read the install report. Before the first implementation slice, resolve or
+6. Run the readiness doctor from the target repo when available:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-doctor.mjs \
+  --config=apex.workflow.json \
+  --target=.
+```
+
+7. Read the install report. Before the first implementation slice, resolve or
    consciously accept `setup.reviewNeeded`, confirm any `setup.inferredPaths`
    marked `guessed`, and preserve any `operatorCautions`.
 
@@ -84,7 +92,7 @@ configured helper. Default command when this repo is available:
 node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
   new \
   --config=apex.workflow.json \
-  --file=tmp/apex-workflow/<slice>.json \
+  --slug=<slice> \
   --issue=<id-or-none> \
   --mode=<mode> \
   --surface="<owner>" \
@@ -111,7 +119,7 @@ Use the manifest for scoped changed-file analysis:
 node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
   detect \
   --config=apex.workflow.json \
-  --file=tmp/apex-workflow/<slice>.json
+  --slug=<slice>
 ```
 
 ## Routing Rules
@@ -145,11 +153,25 @@ Use the profile's `manifest.finishPacket`. Default:
 - `Downshift proof`
 - `Owned files`
 - `No-touch preserved`
-- `Verified`
+- `Verified commands`
+- `Failed / skipped checks`
 - `Code-intelligence scope`
 - `Tracker update`
-- `Known failures / not verified`
 - `Next safe slice`
+
+Generate the packet from the manifest when the helper is available:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+  finish \
+  --config=apex.workflow.json \
+  --slug=<slice> \
+  --verified="<commands run>" \
+  --failed="<failed checks or none>" \
+  --skipped="<skipped checks with reasons>" \
+  --tracker-update="<tracker disposition>" \
+  --next="<next safe slice>"
+```
 
 ## Common Mistakes
 
@@ -158,5 +180,6 @@ Use the profile's `manifest.finishPacket`. Default:
 - using tracker state as product authority
 - editing shared surfaces before reading contracts
 - running broad dirty-tree analysis and calling it slice proof
+- creating a manifest and leaving defaults like empty `ownedFiles` or `checks.typecheck: TODO`; `detect` will fail until current-slice files and required/skip check dispositions are explicit
 - treating browser screenshots as visual signoff when the profile says functional-only
 - finishing without a manifest-backed scope and verification summary

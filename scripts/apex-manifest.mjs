@@ -8,11 +8,13 @@ import process from "node:process";
 function usage(exitCode = 0) {
   const message = `
 Usage:
+  node scripts/apex-manifest.mjs new --config=apex.workflow.json --slug=<slug> --issue=APP-1 --mode=route-local --surface="owner" --downshift="route-local: one owner and focused checks cover the slice"
   node scripts/apex-manifest.mjs new --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --issue=APP-1 --mode=route-local --surface="owner" --downshift="route-local: one owner and focused checks cover the slice"
   node scripts/apex-manifest.mjs check --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json
   node scripts/apex-manifest.mjs files --file=tmp/apex-workflow/<slug>.json
   node scripts/apex-manifest.mjs detect --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json
   node scripts/apex-manifest.mjs summary --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json
+  node scripts/apex-manifest.mjs finish --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --verified="npm test" --next="APP-2"
 `;
   (exitCode === 0 ? console.log : console.error)(message.trim());
   process.exit(exitCode);
@@ -54,6 +56,23 @@ function readManifest(filePath) {
   const absolute = resolve(process.cwd(), filePath);
   if (!existsSync(absolute)) throw new Error(`manifest not found: ${filePath}`);
   return JSON.parse(readFileSync(absolute, "utf8"));
+}
+
+function manifestPathFromArgs(args, config) {
+  if (args.file) return String(args.file);
+  if (!args.slug) throw new Error("--file or --slug is required");
+
+  const defaultDir = config?.manifest?.defaultDir;
+  if (typeof defaultDir !== "string" || defaultDir.trim() === "") {
+    throw new Error("config.manifest.defaultDir is required when using --slug");
+  }
+
+  const slug = String(args.slug).trim();
+  if (!slug || slug.includes("/") || slug.includes("\\")) {
+    throw new Error("--slug must be a non-empty file slug, not a path");
+  }
+
+  return join(defaultDir, slug.endsWith(".json") ? slug : `${slug}.json`);
 }
 
 function writeManifest(filePath, manifest) {
@@ -182,8 +201,7 @@ function validateManifest(manifest, config) {
 }
 
 function commandNew(args, config) {
-  const filePath = args.file;
-  if (!filePath) throw new Error("--file is required");
+  const filePath = manifestPathFromArgs(args, config);
   if (existsSync(resolve(process.cwd(), filePath)) && !args.force) {
     throw new Error(`manifest already exists: ${filePath}. Pass --force to overwrite.`);
   }
@@ -194,7 +212,7 @@ function commandNew(args, config) {
 }
 
 function commandCheck(args, config) {
-  const manifest = readManifest(args.file);
+  const manifest = readManifest(manifestPathFromArgs(args, config));
   const failures = validateManifest(manifest, config);
   if (failures.length > 0) {
     console.error("[apex-manifest] manifest check failed:");
@@ -222,7 +240,7 @@ function runDetectCommand(command, changedFilesFile) {
 }
 
 function commandDetect(args, config) {
-  const manifest = readManifest(args.file);
+  const manifest = readManifest(manifestPathFromArgs(args, config));
   const failures = validateManifest(manifest, config);
   if (failures.length > 0) {
     console.error("[apex-manifest] manifest check failed; refusing detect:");
@@ -245,7 +263,7 @@ function commandDetect(args, config) {
 }
 
 function commandSummary(args, config) {
-  const manifest = readManifest(args.file);
+  const manifest = readManifest(manifestPathFromArgs(args, config));
   console.log(`App: ${manifest.app ?? config.name}`);
   console.log(`Issue: ${manifest.issue}`);
   console.log(`Mode: ${manifest.mode}`);
@@ -257,6 +275,86 @@ function commandSummary(args, config) {
   console.log(`Downshift proof: ${manifest.downshiftProof ?? "missing"}`);
   console.log(`Browser: ${manifest.checks?.browser ?? "missing"}`);
   console.log(`Typecheck: ${manifest.checks?.typecheck ?? "missing"}`);
+}
+
+function listValue(value) {
+  const entries = normalizeStringArray(value);
+  return entries.length > 0 ? entries : ["none"];
+}
+
+function formatList(entries) {
+  return entries.map((entry) => `- ${entry}`).join("\n");
+}
+
+function codeIntelligenceScope(manifest) {
+  const impacts = manifest.codeIntelligence?.impacts ?? [];
+  const impactText =
+    impacts.length > 0
+      ? impacts.map((impact) => `${impact.target} (${impact.risk}${impact.notes ? `: ${impact.notes}` : ""})`).join("; ")
+      : "none recorded";
+  const detect = manifest.codeIntelligence?.detect ? JSON.stringify(manifest.codeIntelligence.detect) : "not recorded";
+  return `${manifest.codeIntelligence?.provider ?? "missing"}; impacts: ${impactText}; detect: ${detect}`;
+}
+
+function finishValue(label, manifest, config, args) {
+  const normalized = label.toLowerCase();
+  if (normalized === "what landed") return args.landed || manifest.notes || `${manifest.surface} slice`;
+  if (normalized === "mode") return manifest.mode ?? "missing";
+  if (normalized === "downshift proof") return manifest.downshiftProof ?? "missing";
+  if (normalized === "owned files") return formatList(listValue(args.files ?? manifest.ownedFiles));
+  if (normalized === "no-touch preserved") return formatList(listValue(args["no-touch"] ?? manifest.noTouch));
+  if (normalized === "verified") return formatList(listValue(args.verified ?? manifest.checks?.required));
+  if (normalized === "verified commands") return formatList(listValue(args.verified ?? manifest.checks?.required));
+  if (normalized === "failed / skipped checks") {
+    const failed = normalizeStringArray(args.failed).map((entry) => `failed: ${entry}`);
+    const skipped = normalizeStringArray(args.skipped).map((entry) => `skipped: ${entry}`);
+    const known = normalizeStringArray(manifest.knownFailures).map((entry) => `known: ${entry}`);
+    return formatList([...failed, ...skipped, ...known].length > 0 ? [...failed, ...skipped, ...known] : ["none"]);
+  }
+  if (normalized === "known failures / not verified") {
+    const skipped = normalizeStringArray(args.skipped);
+    return formatList([...skipped, ...(manifest.knownFailures ?? [])].length > 0 ? [...skipped, ...(manifest.knownFailures ?? [])] : ["none"]);
+  }
+  if (normalized === "code-intelligence scope" || normalized === "gitnexus scope") return codeIntelligenceScope(manifest);
+  if (normalized === "tracker update" || normalized === "linear update") {
+    return args["tracker-update"] ?? `${manifest.tracker?.provider ?? config.tracker?.provider ?? "missing"} / ${manifest.tracker?.disposition ?? "missing"}${manifest.tracker?.id ? ` (${manifest.tracker.id})` : ""}`;
+  }
+  if (normalized === "next safe slice") return args.next ?? "not specified";
+  return args[label] ?? "not recorded";
+}
+
+function commandFinish(args, config) {
+  const manifest = readManifest(manifestPathFromArgs(args, config));
+  const failures = validateManifest(manifest, config);
+  if (failures.length > 0) {
+    console.error("[apex-manifest] manifest check failed; refusing finish:");
+    for (const failure of failures) console.error(`- ${failure}`);
+    process.exit(1);
+  }
+
+  const labels = config.manifest?.finishPacket?.length > 0 ? config.manifest.finishPacket : [
+    "What landed",
+    "Mode",
+    "Downshift proof",
+    "Owned files",
+    "No-touch preserved",
+    "Verified commands",
+    "Failed / skipped checks",
+    "Code-intelligence scope",
+    "Tracker update",
+    "Next safe slice",
+  ];
+  const output = [`# Finish Packet`, "", ...labels.flatMap((label) => [`## ${label}`, finishValue(label, manifest, config, args), ""])].join("\n");
+
+  if (args.out) {
+    const outPath = resolve(process.cwd(), String(args.out));
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, output.endsWith("\n") ? output : `${output}\n`);
+    console.log(`[apex-manifest] wrote ${repoPath(outPath)}`);
+    return;
+  }
+
+  console.log(output);
 }
 
 try {
@@ -279,6 +377,9 @@ try {
       break;
     case "summary":
       commandSummary(args, config);
+      break;
+    case "finish":
+      commandFinish(args, config);
       break;
     default:
       usage(1);

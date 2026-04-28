@@ -1,0 +1,7 @@
+{
+  "name": "dry-run-no-writes-app",
+  "private": true,
+  "scripts": {
+    "test": "node --version"
+  }
+}

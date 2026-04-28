@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "name": "example-app",
-  "description": "Apex Workflow profile for this app.",
+  "name": "service-desk",
+  "description": "Non-Minty example profile for a small service desk app with no tracker, graph tooling, or browser automation.",
   "operatorCautions": [],
   "authority": {
-    "productTruth": [],
+    "productTruth": ["PRODUCT.md"],
     "executionTruth": [],
-    "workflowRules": [],
+    "workflowRules": ["AGENTS.md"],
     "doNotUseAsAuthority": []
   },
   "orientation": {
     "readFirst": ["AGENTS.md"],
-    "readBeforeBroadSearch": [],
+    "readBeforeBroadSearch": ["README.md"],
     "sectionedDocs": []
   },
   "modes": [
@@ -28,40 +28,18 @@
       "codeFacing": true
     },
     {
-      "id": "shared-surface",
-      "useWhen": "Shared shell, store, hook, auth, workspace, or multi-route coupling.",
-      "requiredGates": ["manifest", "contract bridge", "impact check", "broader checks"],
-      "codeFacing": true
-    },
-    {
-      "id": "issue-resume",
-      "useWhen": "Named tracker issue, dirty branch, or multi-slice continuation.",
-      "requiredGates": ["manifest", "latest tracker or plan state", "no-touch surfaces", "first-gap verification"],
-      "codeFacing": true
-    },
-    {
       "id": "planning",
       "useWhen": "Product, design, or architecture decision before code.",
       "requiredGates": ["durable plan artifact when useful"],
-      "codeFacing": false
-    },
-    {
-      "id": "reconciliation",
-      "useWhen": "Implementation is done and remaining work is tracker, review, audit, or wait state.",
-      "requiredGates": ["evidence packet", "tracker disposition"],
       "codeFacing": false
     }
   ],
   "tracker": {
     "provider": "none",
     "project": null,
-    "authorityRule": "Tracker reflects execution state, not product truth.",
-    "recordWhen": [
-      "medium or large change",
-      "user-facing flow, contract, or cross-surface behavior",
-      "likely follow-up, coordination, or prioritization need"
-    ],
-    "dispositions": ["none", "existing", "new", "blocked"]
+    "authorityRule": "Tracker reflects execution state when configured; this app has no durable tracker.",
+    "recordWhen": ["medium or large change", "follow-up or coordination need"],
+    "dispositions": ["none", "blocked"]
   },
   "codeIntelligence": {
     "provider": "focused-search",
@@ -79,16 +57,16 @@
     "contextCommand": null,
     "impactCommand": null,
     "detectCommand": null,
-    "fallback": "Use focused source search and route through configured docs."
+    "fallback": "Use focused source search and route through README, PRODUCT.md, and contracts."
   },
   "contracts": {
-    "featureArtifacts": [],
-    "stateContracts": [],
-    "surrogates": []
+    "featureArtifacts": ["docs/feature-artifacts"],
+    "stateContracts": ["docs/state-contracts"],
+    "surrogates": ["README.md"]
   },
   "verification": {
     "focusedChecksFirst": true,
-    "requiredCommands": [],
+    "requiredCommands": ["npm test"],
     "optionalCommands": [],
     "knownFailures": null,
     "browser": {

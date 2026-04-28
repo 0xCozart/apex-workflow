@@ -2,6 +2,13 @@
 
 Use the profile's `codeIntelligence` adapter.
 
+Read `codeIntelligence.availability` before assuming graph tooling is usable:
+
+- `configuredPreference`: preferred adapter from the profile
+- `detectedRepoSupport`: install-time evidence in the target repo
+- `currentHostAvailability`: current agent/session proof, especially for MCP tools
+- `fallbackCommandReadiness`: wrapper fallback command state
+
 ## GitNexus MCP Adapter
 
 When `codeIntelligence.provider` is `gitnexus-mcp`:

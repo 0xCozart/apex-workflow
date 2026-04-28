@@ -1,0 +1,7 @@
+{
+  "name": "existing-agents-managed-app",
+  "private": true,
+  "scripts": {
+    "test": "node --version"
+  }
+}

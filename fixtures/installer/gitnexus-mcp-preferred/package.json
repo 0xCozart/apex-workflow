@@ -1,0 +1,10 @@
+{
+  "name": "gitnexus-mcp-preferred-app",
+  "private": true,
+  "scripts": {
+    "gitnexus": "node scripts/gitnexus-ok.mjs",
+    "gitnexus:status": "node scripts/gitnexus-ok.mjs status",
+    "gitnexus:ensure-fresh": "node scripts/gitnexus-ok.mjs ensure-fresh",
+    "test": "node --version"
+  }
+}

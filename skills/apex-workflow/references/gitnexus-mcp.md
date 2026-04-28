@@ -2,6 +2,13 @@
 
 Use GitNexus as MCP first when the target repo chooses GitNexus.
 
+The profile separates preference from proof:
+
+- `provider` and `availability.configuredPreference` say what should be used.
+- `availability.detectedRepoSupport` records target repo evidence.
+- `availability.currentHostAvailability` stays unknown until the current agent can see MCP tools/resources.
+- `availability.fallbackCommandReadiness` records whether wrapper commands can cover MCP failure.
+
 ## MCP Install Contract
 
 The installing agent should:
@@ -61,4 +68,3 @@ Minimum wrapper behavior:
 - fall back to focused source search when graph output is unavailable or suspicious
 
 The wrapper is a fallback path, not the preferred install path.
-

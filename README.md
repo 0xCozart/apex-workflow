@@ -28,6 +28,7 @@ APEX WORKFLOW CONTROL PLANE
 [apex-workflow repo]
   scripts/init-harness.mjs
   scripts/check-config.mjs
+  scripts/apex-doctor.mjs
   scripts/apex-manifest.mjs
   skills/apex-workflow/SKILL.md
         |
@@ -134,6 +135,14 @@ The installer writes `apex.workflow.json`, adds a managed Apex block to the targ
 
 It also prints an install report: inferred authority paths with confidence, adapter choices, dirty repo state, review items, and whether to commit the harness setup before the first implementation slice.
 
+Before the first implementation slice, run the doctor against the target repo:
+
+```bash
+npm run doctor -- --target=/path/to/app --config=apex.workflow.json
+```
+
+The doctor checks unresolved setup review items, guessed inferred paths, whether `tmp/apex-workflow/` is ignored, the managed `AGENTS.md` block, adapter readiness, the local skill symlink, and whether the installed setup has a clean baseline checkpoint.
+
 ## What The Profile Controls
 
 `apex.workflow.json` is the contract between the target app and the agent.
@@ -189,6 +198,41 @@ If MCP fails because of host config, runtime, stale reloads, or local storage is
 
 MCP is the clean path. The wrapper is the survival path.
 
+The profile records these separately:
+
+- configured preference
+- detected repo support
+- current host availability
+- fallback command readiness
+
+Install-time repo evidence can detect wrapper scripts or GitNexus markers, but host MCP availability is only proven in the active agent session.
+
+## Manifests And Finish Packets
+
+Use the configured manifest directory instead of hand-writing `tmp/apex-workflow` paths:
+
+```bash
+npm run manifest -- new \
+  --config=apex.workflow.json \
+  --slug=app-123-thing \
+  --issue=APP-123 \
+  --mode=route-local \
+  --surface="ticket detail route" \
+  --downshift="route-local: one owner and focused checks cover this slice"
+```
+
+Generate a handoff packet from the manifest:
+
+```bash
+npm run manifest -- finish \
+  --config=apex.workflow.json \
+  --slug=app-123-thing \
+  --verified="npm test" \
+  --skipped="browser: no UI change" \
+  --tracker-update="none" \
+  --next="APP-124"
+```
+
 ## Why It Works
 
 - **It makes repo authority explicit.** The agent reads the right docs before broad search.
@@ -226,10 +270,13 @@ apex-workflow/
   package.json                      init, manifest, validation scripts
   templates/apex.workflow.json      blank target-app profile
   profiles/minty.workflow.json      extracted production profile
+  profiles/service-desk.workflow.json non-Minty example profile
   schemas/apex.workflow.schema.json profile schema
   scripts/init-harness.mjs          target repo installer
+  scripts/apex-doctor.mjs           readiness checker
   scripts/apex-manifest.mjs         slice manifest lifecycle
   scripts/check-config.mjs          profile validator
+  scripts/test-installer-fixtures.mjs fixture regression tests
   skills/apex-workflow/SKILL.md     Codex skill entrypoint
   docs/adoption.md                  install details
   docs/extraction-map.md            extraction notes
@@ -239,6 +286,7 @@ apex-workflow/
 
 ```bash
 npm run check:config
+npm run test:fixtures
 npm run self-check
 ```
 

@@ -201,6 +201,9 @@ function validateConfig(config, options) {
   if (!["focused-search", "gitnexus-mcp", "gitnexus-wrapper"].includes(codeIntelligence.provider)) {
     failures.push("codeIntelligence.provider must be focused-search, gitnexus-mcp, or gitnexus-wrapper");
   }
+  if (codeIntelligence.availability !== undefined && !isPlainObject(codeIntelligence.availability)) {
+    failures.push("codeIntelligence.availability must be an object when present");
+  }
   if (codeIntelligence.provider === "gitnexus-mcp" && !isPlainObject(codeIntelligence.mcp)) {
     failures.push("codeIntelligence.mcp must be configured when provider is gitnexus-mcp");
   }

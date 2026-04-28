@@ -70,6 +70,7 @@ The install report includes:
 
 - inferred authority and orientation paths with `confirmed`, `guessed`, or `generated` confidence
 - tracker, code-intelligence, and browser choices
+- code-intelligence availability split into configured preference, detected repo support, current host availability, and fallback command readiness
 - target repo dirty state
 - review items to resolve before the first implementation slice
 - baseline checkpoint guidance when setup files are uncommitted
@@ -84,6 +85,23 @@ that field is path-like and the validator treats it as profile path data.
 - Prefer arrays of docs over prose paragraphs.
 - Commands may include placeholders such as `{symbol}`, `{query}`, `{file}`, and `{changedFilesFile}`.
 - `codeIntelligence.detectCommand` should accept a changed-files file placeholder when the provider supports scoped analysis.
+- `codeIntelligence.availability` records install-time readiness and host-session proof separately. Do not treat `provider = "gitnexus-mcp"` as proof that MCP tools are visible to the current agent.
 - If a target app has no tracker, set `tracker.provider` to `none` and require explicit skip reasons in manifests.
 - Review `setup.inferredPaths` before the first slice. Anything marked `guessed` is a candidate, not confirmed authority.
 - Required path validation is exact-case. Fix `docs/ARCHITECTURE.md` to `docs/architecture.md` when that is the real file.
+
+## Doctor
+
+Use the doctor to answer whether the target repo is ready for its first
+implementation slice:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-doctor.mjs \
+  --target=/path/to/app \
+  --config=apex.workflow.json
+```
+
+It checks unresolved installer review items, guessed inferred paths,
+`tmp/apex-workflow/` ignore coverage, the managed `AGENTS.md` block, configured
+adapter readiness, the skill symlink, and whether setup files have a clean git
+baseline.

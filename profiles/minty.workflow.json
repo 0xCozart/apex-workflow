@@ -81,6 +81,12 @@
   },
   "codeIntelligence": {
     "provider": "gitnexus-mcp",
+    "availability": {
+      "configuredPreference": "gitnexus-mcp",
+      "detectedRepoSupport": "detected",
+      "currentHostAvailability": "unknown-until-agent-session-verifies-mcp-tools",
+      "fallbackCommandReadiness": "configured"
+    },
     "mcp": {
       "preferred": true,
       "install": "Install GitNexus as an MCP server in the host agent, index the repo with npx gitnexus analyze, then verify gitnexus tools and gitnexus:// resources are visible to the agent.",
@@ -146,10 +152,10 @@
       "Downshift proof",
       "Owned files",
       "No-touch preserved",
-      "Verified",
-      "GitNexus scope",
-      "Linear update",
-      "Known failures / not verified",
+      "Verified commands",
+      "Failed / skipped checks",
+      "Code-intelligence scope",
+      "Tracker update",
       "Next safe slice"
     ]
   }
