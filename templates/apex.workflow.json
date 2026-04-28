@@ -79,6 +79,10 @@
     "contextCommand": null,
     "impactCommand": null,
     "detectCommand": null,
+    "freshnessGate": {
+      "enabled": false,
+      "policy": "Not required for focused-search."
+    },
     "fallback": "Use focused source search and route through configured docs."
   },
   "contracts": {
@@ -114,6 +118,7 @@
       "Verified commands",
       "Failed / skipped checks",
       "Manual evidence",
+      "GitNexus freshness",
       "Code-intelligence scope",
       "Tracker update",
       "Next safe slice"

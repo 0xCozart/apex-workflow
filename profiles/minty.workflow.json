@@ -110,6 +110,13 @@
     "contextCommand": "gitnexus_context({name})",
     "impactCommand": "gitnexus_impact({target, direction: \"upstream\"})",
     "detectCommand": "gitnexus_detect_changes({changedFiles})",
+    "freshnessGate": {
+      "enabled": true,
+      "preSliceStatus": "Required for non-tiny code-facing slices.",
+      "preSliceRefresh": "Required when status is stale, missing, or marked refreshRequired.",
+      "postSliceRefresh": "Required after graph-relevant code changes.",
+      "postSliceSkipReason": "Required when post-slice refresh is intentionally skipped."
+    },
     "fallback": "Use the repo-local wrapper from docs/runbooks/gitnexus-local-workflow.md plus focused rg/sed caller confirmation when GitNexus MCP is stale, unavailable, or suspiciously low-signal.",
     "highRiskWarning": "Warn before proceeding when impact is HIGH or CRITICAL."
   },
@@ -155,6 +162,7 @@
       "Verified commands",
       "Failed / skipped checks",
       "Manual evidence",
+      "GitNexus freshness",
       "Code-intelligence scope",
       "Tracker update",
       "Next safe slice"

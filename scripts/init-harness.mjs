@@ -373,6 +373,10 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
       contextCommand: null,
       impactCommand: null,
       detectCommand: null,
+      freshnessGate: {
+        enabled: false,
+        policy: "Not required for focused-search.",
+      },
       fallback: "Use focused source search and route through configured docs.",
     };
   }
@@ -399,6 +403,13 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
       contextCommand: wrapperFallback.contextCommand,
       impactCommand: wrapperFallback.impactCommand,
       detectCommand: wrapperFallback.detectCommand,
+      freshnessGate: {
+        enabled: true,
+        preSliceStatus: "Required for non-tiny code-facing slices.",
+        preSliceRefresh: "Required when status is stale, missing, or marked refreshRequired.",
+        postSliceRefresh: "Required after graph-relevant code changes.",
+        postSliceSkipReason: "Required when post-slice refresh is intentionally skipped.",
+      },
       fallback: "Use focused source search and route through configured docs when graph tooling is stale, unavailable, or suspiciously low-signal.",
       highRiskWarning: "Warn before proceeding when impact is HIGH or CRITICAL.",
     };
@@ -427,6 +438,13 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
     contextCommand: "gitnexus_context({name})",
     impactCommand: "gitnexus_impact({target, direction: \"upstream\"})",
     detectCommand: "gitnexus_detect_changes({changedFiles})",
+    freshnessGate: {
+      enabled: true,
+      preSliceStatus: "Required for non-tiny code-facing slices.",
+      preSliceRefresh: "Required when status is stale, missing, or marked refreshRequired.",
+      postSliceRefresh: "Required after graph-relevant code changes.",
+      postSliceSkipReason: "Required when post-slice refresh is intentionally skipped.",
+    },
     fallback: "If GitNexus MCP is unavailable or unreliable, use wrapperFallback when enabled; otherwise use focused source search and route through configured docs.",
     highRiskWarning: "Warn before proceeding when impact is HIGH or CRITICAL.",
   };

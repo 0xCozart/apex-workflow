@@ -149,3 +149,19 @@ node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
   --kind=manual-terminal \
   --summary="TUI resumed the real session id and side panel loaded"
 ```
+
+Record GitNexus freshness separately from verification commands:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+  record-gitnexus-freshness \
+  --config=apex.workflow.json \
+  --slug=<slice> \
+  --phase=pre-status \
+  --status=fresh \
+  --command="npm run gitnexus:status"
+```
+
+`close` and standalone `finish` enforce this for GitNexus-enabled non-tiny
+code slices. They require pre-slice status evidence and either post-slice
+refresh evidence or a recorded skip reason.

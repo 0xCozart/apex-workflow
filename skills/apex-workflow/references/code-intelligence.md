@@ -20,6 +20,7 @@ When `codeIntelligence.provider` is `gitnexus-mcp`:
 5. Run `gitnexus_impact` before non-trivial symbol edits.
 6. Warn before proceeding when impact risk is high or critical.
 7. Run `gitnexus_detect_changes` with manifest-owned changed files before finish.
+8. Record the manifest freshness gate before close.
 
 Read `references/gitnexus-mcp.md` for install and wrapper fallback details.
 
@@ -33,6 +34,37 @@ When `codeIntelligence.provider` is `gitnexus-wrapper`, or when MCP fails and
 3. Use wrapper query/context for unfamiliar ownership.
 4. Run wrapper impact before non-trivial symbol edits.
 5. Run wrapper detect with a manifest-owned changed-files list before finish.
+6. Record the manifest freshness gate before close.
+
+## Freshness Gate
+
+For GitNexus-enabled non-tiny code slices, Apex requires freshness evidence in
+the slice manifest before `close` or standalone `finish`:
+
+- `preSliceStatus`: always required.
+- `preSliceRefresh`: required when status is `stale`, `missing`, or marked
+  `refreshRequired`.
+- `postSliceRefresh`: required after graph-relevant code changes.
+- `postSliceSkipReason`: required when post-slice refresh is intentionally
+  skipped.
+
+Record the gate explicitly:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+  record-gitnexus-freshness \
+  --config=apex.workflow.json \
+  --slug=<slice> \
+  --phase=pre-status \
+  --status=fresh \
+  --command="npm run gitnexus:status"
+```
+
+Use `--phase=pre-refresh --status=refreshed` after a required refresh. Use
+`--phase=post-refresh --status=refreshed --graph-relevant=true` when changed
+code should update the graph for the next slice. Use
+`--phase=post-skip --status=skipped --reason="docs-only slice"` only when the
+change does not affect future graph reasoning.
 
 ## Search-Only Adapter
 

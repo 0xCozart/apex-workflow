@@ -164,6 +164,8 @@ Use the profile's `manifest.finishPacket`. Default:
 - `No-touch preserved`
 - `Verified commands`
 - `Failed / skipped checks`
+- `Manual evidence`
+- `GitNexus freshness`
 - `Code-intelligence scope`
 - `Tracker update`
 - `Next safe slice`
@@ -204,6 +206,24 @@ node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
   --summary="<what was observed>" \
   --source="<terminal, TUI, device, or operator context>"
 ```
+
+For GitNexus-enabled non-tiny code slices, record freshness gate evidence before
+close:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+  record-gitnexus-freshness \
+  --config=apex.workflow.json \
+  --slug=<slice> \
+  --phase=pre-status \
+  --status=fresh \
+  --command="<GitNexus status command>"
+```
+
+Refresh before coding when status is stale, missing, or high-risk, then record
+`--phase=pre-refresh`. After the slice, record `--phase=post-refresh` when the
+change affects graph reasoning for the next slice, or `--phase=post-skip` with
+a reason when it does not.
 
 At the end of a slice, use `close` when the target repo can run the manifest's
 required commands:

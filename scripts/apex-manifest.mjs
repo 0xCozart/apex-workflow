@@ -16,6 +16,7 @@ Usage:
   node scripts/apex-manifest.mjs run-check --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --cmd="npm test"
   node scripts/apex-manifest.mjs record-check --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --cmd="browser: manual QA" --status=skipped --note="no UI change"
   node scripts/apex-manifest.mjs record-evidence --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --kind=manual-terminal --summary="TUI flow exercised" --source="local terminal"
+  node scripts/apex-manifest.mjs record-gitnexus-freshness --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --phase=pre-status --status=fresh --command="npm run gitnexus:status"
   node scripts/apex-manifest.mjs close --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --next="APP-2"
   node scripts/apex-manifest.mjs summary --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json
   node scripts/apex-manifest.mjs finish --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --verified="npm test" --next="APP-2"
@@ -28,8 +29,9 @@ function parseArgs(argv) {
   const [command, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") usage(0);
 
-  const args = { _: [], command };
-  for (const arg of rest) {
+  const args = { _: [], _command: command };
+  for (let index = 0; index < rest.length; index += 1) {
+    const arg = rest[index];
     if (!arg.startsWith("--")) {
       args._.push(arg);
       continue;
@@ -37,7 +39,13 @@ function parseArgs(argv) {
 
     const eqIndex = arg.indexOf("=");
     if (eqIndex === -1) {
-      args[arg.slice(2)] = true;
+      const next = rest[index + 1];
+      if (next && !next.startsWith("--")) {
+        args[arg.slice(2)] = next;
+        index += 1;
+      } else {
+        args[arg.slice(2)] = true;
+      }
     } else {
       args[arg.slice(2, eqIndex)] = arg.slice(eqIndex + 1);
     }
@@ -111,6 +119,10 @@ function getMode(config, modeId) {
   return (config.modes ?? []).find((mode) => mode.id === modeId);
 }
 
+function isCodeFacingMode(config, modeId) {
+  return Boolean(getMode(config, modeId)?.codeFacing);
+}
+
 function makeImpactEntries(value) {
   return normalizeStringArray(value).map((entry) => {
     const [target, risk = "UNKNOWN", ...notesParts] = entry.split(":");
@@ -123,6 +135,9 @@ function makeImpactEntries(value) {
 }
 
 const DIRTY_POLICIES = new Set(["fail-unowned", "owned-files-only"]);
+const GITNEXUS_PROVIDERS = new Set(["gitnexus-mcp", "gitnexus-wrapper"]);
+const FRESHNESS_PHASES = new Set(["pre-status", "pre-refresh", "post-refresh", "post-skip"]);
+const FRESHNESS_STATUSES = new Set(["fresh", "stale", "missing", "unavailable", "refreshed", "skipped"]);
 
 function defaultDirtyPolicy(mode) {
   return mode === "reconciliation" ? "owned-files-only" : "fail-unowned";
@@ -152,6 +167,15 @@ function defaultTypecheckDisposition(config, mode) {
   const optional = normalizeStringArray(config.verification?.optionalCommands);
   const typecheckCommand = [...required, ...optional].find((command) => /typecheck|tsc/.test(command));
   return typecheckCommand ? `configured: ${typecheckCommand}` : "skip: no typecheck command configured in profile";
+}
+
+function makeFreshnessTemplate() {
+  return {
+    preSliceStatus: null,
+    preSliceRefresh: null,
+    postSliceRefresh: null,
+    postSliceSkipReason: null,
+  };
 }
 
 function makeTemplate(args, config) {
@@ -188,6 +212,7 @@ function makeTemplate(args, config) {
       provider: config.codeIntelligence?.provider ?? "none",
       impacts: makeImpactEntries(args.impact ?? args.impacts),
       detect: null,
+      freshness: makeFreshnessTemplate(),
     },
     checks: {
       required: requiredChecks.length > 0 ? requiredChecks : codeFacing ? normalizeStringArray(config.verification?.requiredCommands) : [],
@@ -226,6 +251,9 @@ function validateManifest(manifest, config) {
   }
   if (!manifest.codeIntelligence?.provider) failures.push("codeIntelligence.provider is required");
   if (!Array.isArray(manifest.codeIntelligence?.impacts)) failures.push("codeIntelligence.impacts must be an array");
+  if (manifest.codeIntelligence?.freshness && typeof manifest.codeIntelligence.freshness !== "object") {
+    failures.push("codeIntelligence.freshness must be an object when present");
+  }
   if (!manifest.checks || !Array.isArray(manifest.checks.required)) failures.push("checks.required must be an array");
   if (!Array.isArray(manifest.checks?.optional)) failures.push("checks.optional must be an array");
   if (manifest.evidence && !Array.isArray(manifest.evidence)) failures.push("evidence must be an array");
@@ -477,7 +505,8 @@ function codeIntelligenceScope(manifest) {
       ? impacts.map((impact) => `${impact.target} (${impact.risk}${impact.notes ? `: ${impact.notes}` : ""})`).join("; ")
       : "none recorded";
   const detect = manifest.codeIntelligence?.detect ? JSON.stringify(manifest.codeIntelligence.detect) : "not recorded";
-  return `${manifest.codeIntelligence?.provider ?? "missing"}; impacts: ${impactText}; detect: ${detect}`;
+  const freshness = manifest.codeIntelligence?.freshness ? JSON.stringify(manifest.codeIntelligence.freshness) : "not recorded";
+  return `${manifest.codeIntelligence?.provider ?? "missing"}; impacts: ${impactText}; freshness: ${freshness}; detect: ${detect}`;
 }
 
 function checkRuns(manifest) {
@@ -506,6 +535,18 @@ function formatEvidence(manifest) {
   return formatList(records.map((record) => `${record.kind}: ${record.summary}${record.source ? ` (${record.source})` : ""}${record.note ? ` - ${record.note}` : ""}`));
 }
 
+function formatGitNexusFreshness(manifest, config) {
+  if (!GITNEXUS_PROVIDERS.has(manifest.codeIntelligence?.provider)) return formatList(["not required"]);
+  if (!needsGitNexusFreshnessGate(manifest, config)) return formatList(["not required for this mode"]);
+  const freshness = manifest.codeIntelligence?.freshness ?? {};
+  const entries = [];
+  entries.push(`preSliceStatus: ${freshness.preSliceStatus ? `${freshness.preSliceStatus.status}${freshness.preSliceStatus.note ? ` (${freshness.preSliceStatus.note})` : ""}` : "not recorded"}`);
+  entries.push(`preSliceRefresh: ${freshness.preSliceRefresh ? `${freshness.preSliceRefresh.status}${freshness.preSliceRefresh.note ? ` (${freshness.preSliceRefresh.note})` : ""}` : "not recorded"}`);
+  entries.push(`postSliceRefresh: ${freshness.postSliceRefresh ? `${freshness.postSliceRefresh.status}${freshness.postSliceRefresh.note ? ` (${freshness.postSliceRefresh.note})` : ""}` : "not recorded"}`);
+  entries.push(`postSliceSkipReason: ${freshness.postSliceSkipReason ? freshness.postSliceSkipReason.reason : "not recorded"}`);
+  return formatList(entries);
+}
+
 function finishValue(label, manifest, config, args) {
   const normalized = label.toLowerCase();
   if (normalized === "what landed") return args.landed || manifest.notes || `${manifest.surface} slice`;
@@ -527,6 +568,7 @@ function finishValue(label, manifest, config, args) {
     return formatList([...skipped, ...(manifest.knownFailures ?? [])].length > 0 ? [...skipped, ...(manifest.knownFailures ?? [])] : ["none"]);
   }
   if (normalized === "manual evidence" || normalized === "evidence") return formatEvidence(manifest);
+  if (normalized === "gitnexus freshness") return formatGitNexusFreshness(manifest, config);
   if (normalized === "code-intelligence scope" || normalized === "gitnexus scope") return codeIntelligenceScope(manifest);
   if (normalized === "tracker update" || normalized === "linear update") {
     return args["tracker-update"] ?? `${manifest.tracker?.provider ?? config.tracker?.provider ?? "missing"} / ${manifest.tracker?.disposition ?? "missing"}${manifest.tracker?.id ? ` (${manifest.tracker.id})` : ""}`;
@@ -543,6 +585,12 @@ function commandFinish(args, config) {
     for (const failure of failures) console.error(`- ${failure}`);
     process.exit(1);
   }
+  const freshnessFailures = validateGitNexusFreshnessForClose(manifest, config);
+  if (freshnessFailures.length > 0) {
+    console.error("[apex-manifest] GitNexus freshness gate failed; refusing finish:");
+    for (const failure of freshnessFailures) console.error(`- ${failure}`);
+    process.exit(1);
+  }
 
   const labels = config.manifest?.finishPacket?.length > 0 ? config.manifest.finishPacket : [
     "What landed",
@@ -553,6 +601,7 @@ function commandFinish(args, config) {
     "Verified commands",
     "Failed / skipped checks",
     "Manual evidence",
+    "GitNexus freshness",
     "Code-intelligence scope",
     "Tracker update",
     "Next safe slice",
@@ -595,6 +644,104 @@ function appendRun(manifest, record) {
 function appendEvidence(manifest, record) {
   if (!Array.isArray(manifest.evidence)) manifest.evidence = [];
   manifest.evidence.push(record);
+}
+
+function ensureFreshness(manifest) {
+  if (!manifest.codeIntelligence) manifest.codeIntelligence = { provider: "none", impacts: [], detect: null };
+  if (!manifest.codeIntelligence.freshness || typeof manifest.codeIntelligence.freshness !== "object") {
+    manifest.codeIntelligence.freshness = makeFreshnessTemplate();
+  }
+  return manifest.codeIntelligence.freshness;
+}
+
+function booleanArg(value) {
+  if (value === true) return true;
+  if (value === false || value == null) return false;
+  return ["1", "true", "yes", "y"].includes(String(value).toLowerCase());
+}
+
+function makeFreshnessRecord(args) {
+  const status = String(args.status ?? "");
+  if (!FRESHNESS_STATUSES.has(status)) {
+    throw new Error(`--status must be one of: ${[...FRESHNESS_STATUSES].join(", ")}`);
+  }
+  return {
+    status,
+    command: String(args.cmd ?? args.command ?? ""),
+    note: String(args.note ?? ""),
+    refreshRequired: booleanArg(args["refresh-required"]),
+    graphRelevant: booleanArg(args["graph-relevant"]),
+    recordedAt: new Date().toISOString(),
+  };
+}
+
+function commandRecordGitNexusFreshness(args, config) {
+  const phase = String(args.phase ?? "");
+  if (!FRESHNESS_PHASES.has(phase)) {
+    throw new Error(`--phase must be one of: ${[...FRESHNESS_PHASES].join(", ")}`);
+  }
+  const filePath = manifestPathFromArgs(args, config);
+  const manifest = readManifest(filePath);
+  const freshness = ensureFreshness(manifest);
+  const record = makeFreshnessRecord(args);
+
+  if (phase === "pre-status") freshness.preSliceStatus = record;
+  if (phase === "pre-refresh") freshness.preSliceRefresh = record;
+  if (phase === "post-refresh") {
+    freshness.postSliceRefresh = record;
+    freshness.postSliceSkipReason = null;
+  }
+  if (phase === "post-skip") {
+    freshness.postSliceSkipReason = {
+      reason: String(args.reason ?? args.note ?? ""),
+      graphRelevant: booleanArg(args["graph-relevant"]),
+      recordedAt: record.recordedAt,
+    };
+    if (!freshness.postSliceSkipReason.reason) throw new Error("--reason or --note is required for --phase=post-skip");
+  }
+
+  writeManifest(filePath, manifest);
+  console.log(`[apex-manifest] recorded GitNexus freshness ${phase}: ${record.status}`);
+}
+
+function needsGitNexusFreshnessGate(manifest, config) {
+  return GITNEXUS_PROVIDERS.has(manifest.codeIntelligence?.provider) && isCodeFacingMode(config, manifest.mode) && manifest.mode !== "tiny";
+}
+
+function validateGitNexusFreshnessForClose(manifest, config) {
+  if (!needsGitNexusFreshnessGate(manifest, config)) return [];
+
+  const failures = [];
+  const freshness = manifest.codeIntelligence?.freshness ?? {};
+  const preStatus = freshness.preSliceStatus;
+  const preRefresh = freshness.preSliceRefresh;
+  const postRefresh = freshness.postSliceRefresh;
+  const postSkip = freshness.postSliceSkipReason;
+
+  if (!preStatus) {
+    failures.push("GitNexus freshness preSliceStatus is required for GitNexus-enabled non-tiny code slices");
+  }
+
+  const staleOrRequired =
+    preStatus && (["stale", "missing"].includes(preStatus.status) || preStatus.refreshRequired);
+  if (staleOrRequired && !preRefresh) {
+    failures.push("GitNexus freshness preSliceRefresh is required when preSliceStatus is stale, missing, or refreshRequired");
+  }
+  if (staleOrRequired && preRefresh && preRefresh.status !== "refreshed") {
+    failures.push("GitNexus freshness preSliceRefresh must have status=refreshed when refresh is required");
+  }
+  if (postRefresh && postRefresh.status !== "refreshed") {
+    failures.push("GitNexus freshness postSliceRefresh must have status=refreshed");
+  }
+
+  if (!postRefresh && !postSkip) {
+    failures.push("GitNexus freshness requires postSliceRefresh or postSliceSkipReason before close");
+  }
+  if (postSkip?.graphRelevant) {
+    failures.push("GitNexus freshness postSliceRefresh is required when graphRelevant=true; postSliceSkipReason cannot close the gate");
+  }
+
+  return failures;
 }
 
 function runAndRecord(manifest, command, args = {}) {
@@ -666,6 +813,12 @@ function commandClose(args, config) {
     for (const failure of failures) console.error(`- ${failure}`);
     process.exit(1);
   }
+  const freshnessFailures = validateGitNexusFreshnessForClose(manifest, config);
+  if (freshnessFailures.length > 0) {
+    console.error("[apex-manifest] GitNexus freshness gate failed; refusing close:");
+    for (const failure of freshnessFailures) console.error(`- ${failure}`);
+    process.exit(1);
+  }
 
   const detectResult = runDetect({ ...args, file: filePath, write: true, strict: true }, config, { write: true });
   if (!detectResult.ok) process.exit(detectResult.status);
@@ -709,10 +862,10 @@ function commandClose(args, config) {
 
 try {
   const args = parseArgs(process.argv.slice(2));
-  const needsConfig = !["files"].includes(args.command);
+  const needsConfig = !["files"].includes(args._command);
   const config = needsConfig ? loadConfig(args) : null;
 
-  switch (args.command) {
+  switch (args._command) {
     case "new":
       commandNew(args, config);
       break;
@@ -733,6 +886,9 @@ try {
       break;
     case "record-evidence":
       commandRecordEvidence(args, config);
+      break;
+    case "record-gitnexus-freshness":
+      commandRecordGitNexusFreshness(args, config);
       break;
     case "close":
       commandClose(args, config);

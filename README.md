@@ -256,6 +256,24 @@ npm run manifest -- record-evidence \
   --source="local TUI"
 ```
 
+For GitNexus-enabled non-tiny code slices, record freshness evidence before
+close:
+
+```bash
+npm run manifest -- record-gitnexus-freshness \
+  --config=apex.workflow.json \
+  --slug=app-123-thing \
+  --phase=pre-status \
+  --status=fresh \
+  --command="npm run gitnexus:status"
+```
+
+If the pre-slice status is stale or missing, refresh and record
+`--phase=pre-refresh --status=refreshed`. After graph-relevant code changes,
+refresh and record `--phase=post-refresh`; otherwise record
+`--phase=post-skip --status=skipped --reason="docs-only slice"` or the real
+skip reason.
+
 Close a slice with the generic control-plane path:
 
 ```bash
@@ -269,7 +287,9 @@ npm run manifest -- close \
 `git diff --check`, and prints the finish packet. With
 `dirtyPolicy=owned-files-only`, the diff check is scoped to `ownedFiles`; if no
 owned files are listed, it records a skipped diff-check entry instead of
-testing unrelated dirty work.
+testing unrelated dirty work. For GitNexus-enabled non-tiny code slices, `close`
+also refuses to finish until the freshness gate has pre-slice and post-slice
+evidence.
 
 Generate a handoff packet from the manifest:
 

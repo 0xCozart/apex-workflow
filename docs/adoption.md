@@ -111,6 +111,16 @@ Record manual terminal/TUI evidence separately from automated checks:
 npm run manifest -- record-evidence --config=apex.workflow.json --slug=app-123-slice --kind=manual-terminal --summary="TUI launched with selected provider and resumed the real session id"
 ```
 
+Record GitNexus freshness evidence for GitNexus-enabled non-tiny code slices:
+
+```bash
+npm run manifest -- record-gitnexus-freshness --config=apex.workflow.json --slug=app-123-slice --phase=pre-status --status=fresh --command="npm run gitnexus:status"
+```
+
+If status is stale or missing, refresh and record `--phase=pre-refresh`. Before
+finish, record either `--phase=post-refresh` for graph-relevant code changes or
+`--phase=post-skip --status=skipped --reason="<why refresh is unnecessary>"`.
+
 Finish with a generated packet:
 
 ```bash

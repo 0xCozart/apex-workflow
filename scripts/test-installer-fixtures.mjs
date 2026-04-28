@@ -223,6 +223,146 @@ function testLinearGitNexusWrapper(root) {
   assert(config.codeIntelligence.provider === "gitnexus-wrapper", "wrapper fixture provider mismatch");
   assert(config.codeIntelligence.wrapperFallback.enabled === true, "wrapper fallback should be enabled");
   assert(config.codeIntelligence.availability.fallbackCommandReadiness === "configured", "wrapper readiness should be configured");
+  assert(config.codeIntelligence.freshnessGate.enabled === true, "wrapper fixture should enable freshness gate");
+}
+
+function testGitNexusFreshnessGate(root) {
+  const target = makeTarget(root, "linear-gitnexus-wrapper", "gitnexus-freshness-gate");
+  const skillDir = join(root, "skills-freshness");
+  initHarness(target, [
+    "--config-mode=custom",
+    "--tracker=none",
+    "--code-intelligence=gitnexus-wrapper",
+    "--browser=none",
+  ], skillDir);
+
+  assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["add", "."]).status === 0, "git add failed");
+  assert(
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    "git commit failed",
+  );
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "new",
+    "--config=apex.workflow.json",
+    "--slug=freshness-slice",
+    "--issue=none",
+    "--mode=route-local",
+    "--surface=product doc",
+    "--files=PRODUCT.md",
+    "--downshift=route-local: one product doc owner",
+    "--browser=skip: docs only",
+    "--typecheck=skip: fixture docs only",
+    "--required=node --version",
+  ], { cwd: target });
+
+  const missingGate = run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "close",
+    "--config=apex.workflow.json",
+    "--slug=freshness-slice",
+    "--next=none",
+  ], { cwd: target, allowFailure: true });
+  assert(missingGate.status !== 0, "GitNexus close should fail without freshness records");
+  assert(
+    `${missingGate.stdout}\n${missingGate.stderr}`.includes("preSliceStatus is required"),
+    "freshness gate should report missing preSliceStatus",
+  );
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "record-gitnexus-freshness",
+    "--config=apex.workflow.json",
+    "--slug=freshness-slice",
+    "--phase=pre-status",
+    "--status=fresh",
+    "--command=npm run gitnexus:status",
+  ], { cwd: target });
+
+  const missingPost = run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "finish",
+    "--config=apex.workflow.json",
+    "--slug=freshness-slice",
+    "--next=none",
+  ], { cwd: target, allowFailure: true });
+  assert(missingPost.status !== 0, "GitNexus finish should fail without post freshness disposition");
+  assert(
+    `${missingPost.stdout}\n${missingPost.stderr}`.includes("postSliceRefresh or postSliceSkipReason"),
+    "freshness gate should report missing post-slice disposition",
+  );
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "record-gitnexus-freshness",
+    "--config=apex.workflow.json",
+    "--slug=freshness-slice",
+    "--phase=post-skip",
+    "--status=skipped",
+    "--reason=docs-only fixture slice",
+  ], { cwd: target });
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "close",
+    "--config=apex.workflow.json",
+    "--slug=freshness-slice",
+    "--next=none",
+  ], { cwd: target });
+
+  const manifest = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/freshness-slice.json"), "utf8"));
+  assert(manifest.codeIntelligence.freshness.preSliceStatus.status === "fresh", "preSliceStatus should be recorded");
+  assert(
+    manifest.codeIntelligence.freshness.postSliceSkipReason.reason === "docs-only fixture slice",
+    "postSliceSkipReason should be recorded",
+  );
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "new",
+    "--config=apex.workflow.json",
+    "--slug=stale-slice",
+    "--issue=none",
+    "--mode=route-local",
+    "--surface=product doc",
+    "--files=PRODUCT.md",
+    "--downshift=route-local: one product doc owner",
+    "--browser=skip: docs only",
+    "--typecheck=skip: fixture docs only",
+    "--required=node --version",
+  ], { cwd: target });
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "record-gitnexus-freshness",
+    "--config=apex.workflow.json",
+    "--slug=stale-slice",
+    "--phase=pre-status",
+    "--status=stale",
+    "--command=npm run gitnexus:status",
+  ], { cwd: target });
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "record-gitnexus-freshness",
+    "--config=apex.workflow.json",
+    "--slug=stale-slice",
+    "--phase=post-skip",
+    "--status=skipped",
+    "--reason=fixture no follow-up graph work",
+  ], { cwd: target });
+  const missingRefresh = run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "finish",
+    "--config=apex.workflow.json",
+    "--slug=stale-slice",
+    "--next=none",
+  ], { cwd: target, allowFailure: true });
+  assert(missingRefresh.status !== 0, "stale preSliceStatus should require preSliceRefresh");
+  assert(
+    `${missingRefresh.stdout}\n${missingRefresh.stderr}`.includes("preSliceRefresh is required"),
+    "freshness gate should report missing preSliceRefresh",
+  );
 }
 
 function testGitNexusMcpPreferred(root) {
@@ -288,6 +428,7 @@ function main() {
     testNoAdaptersDoctor(root);
     testReconciliationOwnedFilesOnly(root);
     testLinearGitNexusWrapper(root);
+    testGitNexusFreshnessGate(root);
     testGitNexusMcpPreferred(root);
     testExistingAgentsManagedBlock(root);
     testPathCasingMismatch(root);

@@ -130,6 +130,18 @@
         "contextCommand": { "type": ["string", "null"] },
         "impactCommand": { "type": ["string", "null"] },
         "detectCommand": { "type": ["string", "null"] },
+        "freshnessGate": {
+          "type": ["object", "null"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "preSliceStatus": { "type": "string" },
+            "preSliceRefresh": { "type": "string" },
+            "postSliceRefresh": { "type": "string" },
+            "postSliceSkipReason": { "type": "string" },
+            "policy": { "type": "string" }
+          },
+          "additionalProperties": true
+        },
         "fallback": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": true
