@@ -7,6 +7,7 @@
 ![LLM Agents](https://img.shields.io/badge/LLM%20agents-repo%20aware-0f766e)
 ![MCP Ready](https://img.shields.io/badge/MCP-GitNexus%20ready-7c3aed)
 ![Manifest Driven](https://img.shields.io/badge/execution-manifest%20driven-b91c1c)
+[![CI](https://github.com/0xCozart/apex-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/0xCozart/apex-workflow/actions/workflows/ci.yml)
 
 ## The Short Version
 

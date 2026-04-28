@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies when present
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          elif node -e "const p=require('./package.json'); const d={...(p.dependencies||{}),...(p.devDependencies||{})}; process.exit(Object.keys(d).length ? 0 : 1)"; then
+            npm install --ignore-scripts --no-audit --no-fund
+          else
+            echo "No npm dependencies to install."
+          fi
+
+      - name: Self-check
+        run: npm run self-check
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apex-workflow-debug
+          path: |
+            tmp/apex-workflow/
+            npm-debug.log*
+          if-no-files-found: ignore
