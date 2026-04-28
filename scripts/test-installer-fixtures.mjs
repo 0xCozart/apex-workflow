@@ -426,6 +426,46 @@ function testPathCasingMismatch(root) {
   );
 }
 
+function testSchemaValidation(root) {
+  const valid = run([
+    join(APEX_ROOT, "scripts/check-config.mjs"),
+    "--config=profiles/service-desk.workflow.json",
+    "--target=fixtures/config/service-desk",
+    "--format=json",
+  ]);
+  const validJson = JSON.parse(valid.stdout);
+  assert(validJson.ok === true, "valid profile should pass JSON check-config");
+  assert(validJson.schema.ok === true, "valid profile should pass schema validation");
+  assert(validJson.repoChecks.ok === true, "valid profile should pass repo checks");
+
+  const invalidConfig = join(root, "invalid-schema.workflow.json");
+  writeFileSync(
+    invalidConfig,
+    JSON.stringify(
+      {
+        version: 1,
+        name: "invalid-schema-fixture",
+      },
+      null,
+      2,
+    ),
+  );
+  const invalid = run([
+    join(APEX_ROOT, "scripts/check-config.mjs"),
+    `--config=${invalidConfig}`,
+    "--target=fixtures/config/service-desk",
+    "--format=json",
+  ], { allowFailure: true });
+  assert(invalid.status !== 0, "schema-invalid profile should fail");
+  const invalidJson = JSON.parse(invalid.stdout);
+  assert(invalidJson.schema.ok === false, "schema-invalid profile should report schema failure");
+  assert(invalidJson.repoChecks.skipped === true, "repo checks should be skipped when schema fails");
+  assert(
+    invalidJson.schema.errors.some((error) => error.message.includes("must have required property")),
+    "schema errors should include required property details",
+  );
+}
+
 function testDryRunNoWrites(root) {
   const target = makeTarget(root, "dry-run-no-writes");
   const skillDir = join(root, "dry-run-skills");
@@ -513,6 +553,7 @@ function main() {
     testGitNexusFreshnessGate(root);
     testGitNexusMcpPreferred(root);
     testExistingAgentsManagedBlock(root);
+    testSchemaValidation(root);
     testPathCasingMismatch(root);
     testDryRunNoWrites(root);
     testPortableCliEntrypoints(root);

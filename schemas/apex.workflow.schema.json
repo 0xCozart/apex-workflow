@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.local/apex.workflow.schema.json",
+  "$id": "https://apex-workflow.dev/schemas/apex.workflow.schema.json",
   "title": "Apex Workflow Profile",
   "type": "object",
   "required": [

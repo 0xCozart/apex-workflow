@@ -19,5 +19,8 @@
     "manifest": "node scripts/apex-manifest.mjs",
     "test:fixtures": "node scripts/test-installer-fixtures.mjs",
     "self-check": "npm run check:syntax && npm run check:portability && npm run check:config && npm run test:fixtures"
+  },
+  "dependencies": {
+    "ajv": "8.20.0"
   }
 }

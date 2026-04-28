@@ -1,14 +1,20 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { isAbsolute, join, parse, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import process from "node:process";
+import Ajv2020 from "ajv/dist/2020.js";
+
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const SCHEMA_PATH = resolve(SCRIPT_DIR, "../schemas/apex.workflow.schema.json");
 
 function usage(exitCode = 0) {
   const message = `
 Usage:
   node scripts/check-config.mjs --config=profiles/minty.workflow.json
   node scripts/check-config.mjs --config=profiles/minty.workflow.json --target=/path/to/app
+  node scripts/check-config.mjs --config=apex.workflow.json --target=. --format=json
 `;
   (exitCode === 0 ? console.log : console.error)(message.trim());
   process.exit(exitCode);
@@ -37,6 +43,24 @@ function readJson(filePath) {
   return {
     absolute,
     value: JSON.parse(readFileSync(absolute, "utf8")),
+  };
+}
+
+function validateSchema(config) {
+  const schema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8"));
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  const validate = ajv.compile(schema);
+  const ok = validate(config);
+  return {
+    ok,
+    errors: ok
+      ? []
+      : (validate.errors ?? []).map((error) => ({
+          path: error.instancePath || "/",
+          message: error.message ?? "schema validation failed",
+          keyword: error.keyword,
+          params: error.params,
+        })),
   };
 }
 
@@ -263,16 +287,43 @@ function main() {
   if (!args.config) usage(1);
 
   const { absolute, value: config } = readJson(args.config);
-  const { failures, warnings } = validateConfig(config, { target: args.target });
+  const schema = validateSchema(config);
+  const repoChecks = schema.ok
+    ? validateConfig(config, { target: args.target })
+    : { failures: [], warnings: [], skipped: true };
+  const jsonResult = {
+    ok: schema.ok && repoChecks.failures.length === 0,
+    config: absolute.startsWith(process.cwd()) ? absolute.slice(process.cwd().length + 1) : absolute,
+    schema,
+    repoChecks: {
+      ok: !repoChecks.skipped && repoChecks.failures.length === 0,
+      skipped: Boolean(repoChecks.skipped),
+      errors: repoChecks.failures,
+      warnings: repoChecks.warnings,
+    },
+  };
 
-  if (warnings.length > 0) {
-    console.warn("[apex-config] warnings:");
-    for (const warning of warnings) console.warn(`- ${warning}`);
+  if (args.format === "json") {
+    console.log(JSON.stringify(jsonResult, null, 2));
+    process.exit(jsonResult.ok ? 0 : 1);
   }
 
-  if (failures.length > 0) {
+  if (!schema.ok) {
+    console.error("[apex-config] schema validation failed:");
+    for (const error of schema.errors) {
+      console.error(`- ${error.path} ${error.message}`);
+    }
+    process.exit(1);
+  }
+
+  if (repoChecks.warnings.length > 0) {
+    console.warn("[apex-config] warnings:");
+    for (const warning of repoChecks.warnings) console.warn(`- ${warning}`);
+  }
+
+  if (repoChecks.failures.length > 0) {
     console.error("[apex-config] config check failed:");
-    for (const failure of failures) console.error(`- ${failure}`);
+    for (const failure of repoChecks.failures) console.error(`- ${failure}`);
     process.exit(1);
   }
 
