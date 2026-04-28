@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -34,8 +34,8 @@ function git(target, args) {
   });
 }
 
-function makeTarget(root, fixtureName) {
-  const target = join(root, fixtureName);
+function makeTarget(root, fixtureName, targetName = fixtureName) {
+  const target = join(root, targetName);
   cpSync(join(FIXTURES_ROOT, fixtureName), target, { recursive: true });
   return target;
 }
@@ -135,6 +135,76 @@ function testNoAdaptersDoctor(root) {
   ]);
 }
 
+function testReconciliationOwnedFilesOnly(root) {
+  const target = makeTarget(root, "no-adapters", "no-adapters-reconciliation");
+  const skillDir = join(root, "skills-reconciliation");
+  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"], skillDir);
+
+  assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["add", "."]).status === 0, "git add failed");
+  assert(
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    "git commit failed",
+  );
+
+  writeFileSync(join(target, "UNRELATED.md"), "pre-existing external dirty work\n");
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "new",
+    "--config=apex.workflow.json",
+    "--slug=reconcile-slice",
+    "--issue=none",
+    "--mode=reconciliation",
+    "--surface=manual evidence reconciliation",
+  ], { cwd: target });
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "detect",
+    "--config=apex.workflow.json",
+    "--slug=reconcile-slice",
+    "--write",
+  ], { cwd: target });
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "record-evidence",
+    "--config=apex.workflow.json",
+    "--slug=reconcile-slice",
+    "--kind=manual-terminal",
+    "--summary=TUI launched with selected provider and real session id",
+    "--source=fixture terminal",
+  ], { cwd: target });
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "close",
+    "--config=apex.workflow.json",
+    "--slug=reconcile-slice",
+    "--next=none",
+  ], { cwd: target });
+
+  const manifest = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/reconcile-slice.json"), "utf8"));
+  assert(manifest.scope?.dirtyPolicy === "owned-files-only", "reconciliation should default to owned-files-only dirty policy");
+  assert(
+    manifest.scope?.externalDirtyFiles?.includes("UNRELATED.md"),
+    "external dirty file should be recorded on manifest scope",
+  );
+  assert(
+    manifest.codeIntelligence.detect?.externalDirtyFiles?.includes("UNRELATED.md"),
+    "external dirty file should be recorded in detect result",
+  );
+  assert(
+    manifest.evidence?.some((entry) => entry.kind === "manual-terminal" && entry.summary.includes("real session id")),
+    "manual terminal evidence should be recorded",
+  );
+  assert(
+    manifest.checks.runs.some((entry) => entry.command === "git diff --check" && entry.status === "skipped"),
+    "close should skip broad diff check when owned-files-only reconciliation has no owned files",
+  );
+}
+
 function testLinearGitNexusWrapper(root) {
   const target = makeTarget(root, "linear-gitnexus-wrapper");
   const skillDir = join(root, "skills");
@@ -216,6 +286,7 @@ function main() {
   try {
     mkdirSync(root, { recursive: true });
     testNoAdaptersDoctor(root);
+    testReconciliationOwnedFilesOnly(root);
     testLinearGitNexusWrapper(root);
     testGitNexusMcpPreferred(root);
     testExistingAgentsManagedBlock(root);

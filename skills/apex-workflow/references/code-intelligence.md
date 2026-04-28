@@ -54,3 +54,7 @@ slice stayed inside scope.
 When `codeIntelligence.detectCommand` is missing, `apex-manifest detect` checks
 the current dirty tree against `ownedFiles`. Changed files outside the current
 manifest fail the detect step unless they are the manifest artifact itself.
+The exception is an explicit `dirtyPolicy=owned-files-only`, which is the
+default for reconciliation mode. In that mode, unrelated dirty files are
+recorded in the manifest as external state and detect only fails when the
+owned-file scope itself fails.

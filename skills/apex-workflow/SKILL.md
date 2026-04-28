@@ -126,6 +126,10 @@ Run this immediately after creating the manifest and before implementation.
 If no repo-specific `detectCommand` is configured, the helper still runs
 built-in coverage: manifest schema, dirty changed files versus `ownedFiles`,
 the manifest artifact exception, and missing-owned-file warnings.
+Reconciliation manifests use `dirtyPolicy=owned-files-only` by default:
+unrelated dirty files are recorded as external state, while code-facing modes
+continue to fail on unowned dirty files unless the manifest explicitly chooses
+that policy.
 
 ## Routing Rules
 
@@ -186,6 +190,19 @@ node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
   --config=apex.workflow.json \
   --slug=<slice> \
   --cmd="<verification command>"
+```
+
+For manual terminal, TUI, or operator evidence, record evidence instead of
+pretending it was an automated check:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+  record-evidence \
+  --config=apex.workflow.json \
+  --slug=<slice> \
+  --kind=manual-terminal \
+  --summary="<what was observed>" \
+  --source="<terminal, TUI, device, or operator context>"
 ```
 
 At the end of a slice, use `close` when the target repo can run the manifest's

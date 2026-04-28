@@ -89,7 +89,10 @@ npm run manifest -- detect --config=apex.workflow.json --slug=app-123-slice
 
 Run detect before implementation starts. In search-only repos, the built-in
 detect still checks manifest validity and changed-file coverage, so it is useful
-even without GitNexus.
+even without GitNexus. Reconciliation manifests default to
+`dirtyPolicy=owned-files-only`: unrelated dirty files are recorded in
+`scope.externalDirtyFiles` and `codeIntelligence.detect.externalDirtyFiles`,
+but they do not fail the slice when the owned-file scope is clean.
 
 If manifests are durable reviewer or grant evidence, set
 `manifest.defaultDir` to a committed evidence path such as `.apex/manifests` or
@@ -100,6 +103,12 @@ Record verification outcomes as they run:
 
 ```bash
 npm run manifest -- run-check --config=apex.workflow.json --slug=app-123-slice --cmd="npm test"
+```
+
+Record manual terminal/TUI evidence separately from automated checks:
+
+```bash
+npm run manifest -- record-evidence --config=apex.workflow.json --slug=app-123-slice --kind=manual-terminal --summary="TUI launched with selected provider and resumed the real session id"
 ```
 
 Finish with a generated packet:

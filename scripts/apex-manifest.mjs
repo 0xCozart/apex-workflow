@@ -15,6 +15,7 @@ Usage:
   node scripts/apex-manifest.mjs detect --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json
   node scripts/apex-manifest.mjs run-check --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --cmd="npm test"
   node scripts/apex-manifest.mjs record-check --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --cmd="browser: manual QA" --status=skipped --note="no UI change"
+  node scripts/apex-manifest.mjs record-evidence --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --kind=manual-terminal --summary="TUI flow exercised" --source="local terminal"
   node scripts/apex-manifest.mjs close --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --next="APP-2"
   node scripts/apex-manifest.mjs summary --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json
   node scripts/apex-manifest.mjs finish --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --verified="npm test" --next="APP-2"
@@ -121,6 +122,38 @@ function makeImpactEntries(value) {
   });
 }
 
+const DIRTY_POLICIES = new Set(["fail-unowned", "owned-files-only"]);
+
+function defaultDirtyPolicy(mode) {
+  return mode === "reconciliation" ? "owned-files-only" : "fail-unowned";
+}
+
+function normalizeDirtyPolicy(value, mode) {
+  const policy = String(value ?? defaultDirtyPolicy(mode));
+  if (!DIRTY_POLICIES.has(policy)) {
+    throw new Error(`invalid dirty policy "${policy}". Expected one of: ${[...DIRTY_POLICIES].join(", ")}`);
+  }
+  return policy;
+}
+
+function dirtyPolicyFor(manifest, args = {}) {
+  return normalizeDirtyPolicy(args["dirty-policy"] ?? manifest.scope?.dirtyPolicy, manifest.mode);
+}
+
+function defaultBrowserDisposition(config) {
+  const browser = config.verification?.browser;
+  if (!browser || browser.provider === "none") return "skip: browser provider is none for this profile";
+  return `skip: no browser route declared for this slice; profile policy is ${browser.policy}`;
+}
+
+function defaultTypecheckDisposition(config, mode) {
+  if (mode === "planning" || mode === "reconciliation") return "skip: non-code workflow mode";
+  const required = normalizeStringArray(config.verification?.requiredCommands);
+  const optional = normalizeStringArray(config.verification?.optionalCommands);
+  const typecheckCommand = [...required, ...optional].find((command) => /typecheck|tsc/.test(command));
+  return typecheckCommand ? `configured: ${typecheckCommand}` : "skip: no typecheck command configured in profile";
+}
+
 function makeTemplate(args, config) {
   const mode = String(args.mode ?? "route-local");
   if (!getMode(config, mode)) {
@@ -131,33 +164,45 @@ function makeTemplate(args, config) {
   const trackerDisposition =
     String(args.tracker ?? args["tracker-disposition"] ?? (issue !== "none" ? "existing" : "none"));
 
+  const dirtyPolicy = normalizeDirtyPolicy(args["dirty-policy"], mode);
+  const browserDisposition = args.browser ?? defaultBrowserDisposition(config);
+  const typecheckDisposition = args.typecheck ?? defaultTypecheckDisposition(config, mode);
+  const codeFacing = Boolean(getMode(config, mode)?.codeFacing);
+  const requiredChecks = normalizeStringArray(args.required);
+  const optionalChecks = normalizeStringArray(args.optional);
+
   return {
     version: 1,
     app: config.name,
     issue,
     mode,
-    surface: String(args.surface ?? "TODO: owning surface"),
+    surface: String(args.surface ?? (mode === "reconciliation" ? "reconciliation evidence" : "TODO: owning surface")),
     contracts: normalizeStringArray(args.contracts),
     ownedFiles: normalizeStringArray(args.files),
     noTouch: normalizeStringArray(args.noTouch ?? args["no-touch"]),
+    scope: {
+      dirtyPolicy,
+      externalDirtyFiles: [],
+    },
     codeIntelligence: {
       provider: config.codeIntelligence?.provider ?? "none",
       impacts: makeImpactEntries(args.impact ?? args.impacts),
       detect: null,
     },
     checks: {
-      required: normalizeStringArray(args.required),
-      optional: normalizeStringArray(args.optional),
-      browser: String(args.browser ?? "TODO: route or explicit skip reason"),
-      typecheck: String(args.typecheck ?? "TODO: required, known-noisy, or explicit skip reason"),
+      required: requiredChecks.length > 0 ? requiredChecks : codeFacing ? normalizeStringArray(config.verification?.requiredCommands) : [],
+      optional: optionalChecks.length > 0 ? optionalChecks : codeFacing ? normalizeStringArray(config.verification?.optionalCommands) : [],
+      browser: String(browserDisposition),
+      typecheck: String(typecheckDisposition),
       runs: [],
     },
+    evidence: [],
     tracker: {
       provider: config.tracker?.provider ?? "none",
       disposition: trackerDisposition,
       id: issue !== "none" ? issue : null,
     },
-    downshiftProof: String(args.downshift ?? args["downshift-proof"] ?? "TODO: why this is the lightest safe mode"),
+    downshiftProof: String(args.downshift ?? args["downshift-proof"] ?? (mode === "reconciliation" ? "reconciliation: no code implementation in this slice" : "TODO: why this is the lightest safe mode")),
     knownFailures: [],
     notes: "",
   };
@@ -176,10 +221,14 @@ function validateManifest(manifest, config) {
   if (!Array.isArray(manifest.contracts)) failures.push("contracts must be an array");
   if (!Array.isArray(manifest.ownedFiles)) failures.push("ownedFiles must be an array");
   if (!Array.isArray(manifest.noTouch)) failures.push("noTouch must be an array");
+  if (manifest.scope?.dirtyPolicy && !DIRTY_POLICIES.has(manifest.scope.dirtyPolicy)) {
+    failures.push(`scope.dirtyPolicy must be one of: ${[...DIRTY_POLICIES].join(", ")}`);
+  }
   if (!manifest.codeIntelligence?.provider) failures.push("codeIntelligence.provider is required");
   if (!Array.isArray(manifest.codeIntelligence?.impacts)) failures.push("codeIntelligence.impacts must be an array");
   if (!manifest.checks || !Array.isArray(manifest.checks.required)) failures.push("checks.required must be an array");
   if (!Array.isArray(manifest.checks?.optional)) failures.push("checks.optional must be an array");
+  if (manifest.evidence && !Array.isArray(manifest.evidence)) failures.push("evidence must be an array");
   if (!manifest.checks?.browser || String(manifest.checks.browser).startsWith("TODO")) {
     failures.push("checks.browser must be a route or explicit skip reason");
   }
@@ -294,6 +343,7 @@ function builtInDetect(manifest, manifestPath, args = {}) {
   const changed = gitChangedFiles();
   const missingOwnedFiles = [...owned].filter((filePath) => !existsSync(resolve(process.cwd(), filePath)));
   const unownedChangedFiles = changed.files.filter((filePath) => filePath !== manifestFile && !owned.has(filePath));
+  const dirtyPolicy = dirtyPolicyFor(manifest, args);
   const failures = [];
   const warnings = [];
 
@@ -303,18 +353,22 @@ function builtInDetect(manifest, manifestPath, args = {}) {
   } else if (missingOwnedFiles.length > 0) {
     warnings.push(`ownedFiles entries do not exist yet: ${missingOwnedFiles.join(", ")}`);
   }
-  if (unownedChangedFiles.length > 0) {
+  if (unownedChangedFiles.length > 0 && dirtyPolicy === "fail-unowned") {
     failures.push(`changed files not listed in ownedFiles: ${unownedChangedFiles.join(", ")}`);
+  } else if (unownedChangedFiles.length > 0) {
+    warnings.push(`external dirty files recorded outside this slice: ${unownedChangedFiles.join(", ")}`);
   }
 
   return {
     provider: "built-in",
     checkedAt: new Date().toISOString(),
+    dirtyPolicy,
     gitStatusAvailable: changed.available,
     changedFiles: changed.files,
     ownedFiles: [...owned],
     manifestFile,
     unownedChangedFiles,
+    externalDirtyFiles: unownedChangedFiles,
     missingOwnedFiles,
     warnings,
     failures,
@@ -324,10 +378,11 @@ function builtInDetect(manifest, manifestPath, args = {}) {
 
 function printBuiltInDetect(result) {
   console.log("[apex-manifest] built-in detect:");
+  console.log(`- dirty policy: ${result.dirtyPolicy}`);
   console.log(`- changed files: ${result.changedFiles.length}`);
   console.log(`- owned files: ${result.ownedFiles.length}`);
   if (result.unownedChangedFiles.length > 0) {
-    console.log("- unowned changed files:");
+    console.log(result.dirtyPolicy === "owned-files-only" ? "- external dirty files:" : "- unowned changed files:");
     for (const filePath of result.unownedChangedFiles) console.log(`  - ${filePath}`);
   }
   if (result.missingOwnedFiles.length > 0) {
@@ -338,6 +393,11 @@ function printBuiltInDetect(result) {
 }
 
 function updateDetectResult(manifest, detectResult) {
+  manifest.scope = {
+    ...(manifest.scope ?? {}),
+    dirtyPolicy: detectResult.dirtyPolicy,
+    externalDirtyFiles: detectResult.externalDirtyFiles ?? [],
+  };
   manifest.codeIntelligence = {
     ...(manifest.codeIntelligence ?? {}),
     detect: detectResult,
@@ -389,6 +449,7 @@ function commandSummary(args, config) {
   console.log(`Issue: ${manifest.issue}`);
   console.log(`Mode: ${manifest.mode}`);
   console.log(`Surface: ${manifest.surface}`);
+  console.log(`Dirty policy: ${dirtyPolicyFor(manifest, args)}`);
   console.log(`Owned files: ${(manifest.ownedFiles ?? []).length}`);
   console.log(`Contracts: ${(manifest.contracts ?? []).join(", ") || "none listed"}`);
   console.log(`Tracker: ${manifest.tracker?.provider ?? "missing"} / ${manifest.tracker?.disposition ?? "missing"}${manifest.tracker?.id ? ` (${manifest.tracker.id})` : ""}`);
@@ -397,6 +458,7 @@ function commandSummary(args, config) {
   console.log(`Browser: ${manifest.checks?.browser ?? "missing"}`);
   console.log(`Typecheck: ${manifest.checks?.typecheck ?? "missing"}`);
   console.log(`Recorded check runs: ${checkRuns(manifest).length}`);
+  console.log(`Evidence records: ${evidenceRecords(manifest).length}`);
 }
 
 function listValue(value) {
@@ -434,6 +496,16 @@ function failedSkippedFromRuns(manifest) {
     .map((run) => `${run.status}: ${run.command}${run.note ? ` (${run.note})` : ""}`);
 }
 
+function evidenceRecords(manifest) {
+  return Array.isArray(manifest.evidence) ? manifest.evidence : [];
+}
+
+function formatEvidence(manifest) {
+  const records = evidenceRecords(manifest);
+  if (records.length === 0) return formatList(["none"]);
+  return formatList(records.map((record) => `${record.kind}: ${record.summary}${record.source ? ` (${record.source})` : ""}${record.note ? ` - ${record.note}` : ""}`));
+}
+
 function finishValue(label, manifest, config, args) {
   const normalized = label.toLowerCase();
   if (normalized === "what landed") return args.landed || manifest.notes || `${manifest.surface} slice`;
@@ -454,6 +526,7 @@ function finishValue(label, manifest, config, args) {
     const skipped = normalizeStringArray(args.skipped);
     return formatList([...skipped, ...(manifest.knownFailures ?? [])].length > 0 ? [...skipped, ...(manifest.knownFailures ?? [])] : ["none"]);
   }
+  if (normalized === "manual evidence" || normalized === "evidence") return formatEvidence(manifest);
   if (normalized === "code-intelligence scope" || normalized === "gitnexus scope") return codeIntelligenceScope(manifest);
   if (normalized === "tracker update" || normalized === "linear update") {
     return args["tracker-update"] ?? `${manifest.tracker?.provider ?? config.tracker?.provider ?? "missing"} / ${manifest.tracker?.disposition ?? "missing"}${manifest.tracker?.id ? ` (${manifest.tracker.id})` : ""}`;
@@ -479,6 +552,7 @@ function commandFinish(args, config) {
     "No-touch preserved",
     "Verified commands",
     "Failed / skipped checks",
+    "Manual evidence",
     "Code-intelligence scope",
     "Tracker update",
     "Next safe slice",
@@ -518,6 +592,11 @@ function appendRun(manifest, record) {
   manifest.checks.runs.push(record);
 }
 
+function appendEvidence(manifest, record) {
+  if (!Array.isArray(manifest.evidence)) manifest.evidence = [];
+  manifest.evidence.push(record);
+}
+
 function runAndRecord(manifest, command, args = {}) {
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
@@ -526,6 +605,33 @@ function runAndRecord(manifest, command, args = {}) {
   const status = result.status === 0 ? "passed" : "failed";
   appendRun(manifest, makeRunRecord(command, status, result.status, startedAt, durationMs, args.note ?? ""));
   return result.status;
+}
+
+function commandRecordEvidence(args, config) {
+  const filePath = manifestPathFromArgs(args, config);
+  const manifest = readManifest(filePath);
+  const summary = args.summary;
+  if (!summary) throw new Error("--summary is required");
+  const kind = String(args.kind ?? "manual");
+  appendEvidence(manifest, {
+    kind,
+    summary: String(summary),
+    source: String(args.source ?? ""),
+    note: String(args.note ?? ""),
+    recordedAt: new Date().toISOString(),
+  });
+  writeManifest(filePath, manifest);
+  console.log(`[apex-manifest] recorded evidence: ${kind}: ${summary}`);
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
+function ownedDiffCheckCommand(manifest) {
+  const files = normalizeStringArray(manifest.ownedFiles);
+  if (files.length === 0) return null;
+  return `git diff --check -- ${files.map(shellQuote).join(" ")}`;
 }
 
 function commandRunCheck(args, config) {
@@ -564,6 +670,7 @@ function commandClose(args, config) {
   const detectResult = runDetect({ ...args, file: filePath, write: true, strict: true }, config, { write: true });
   if (!detectResult.ok) process.exit(detectResult.status);
   manifest = readManifest(filePath);
+  const dirtyPolicy = dirtyPolicyFor(manifest, args);
   let hadFailure = false;
 
   if (!args["skip-required"]) {
@@ -575,10 +682,26 @@ function commandClose(args, config) {
     }
   }
 
-  const diffStatus = runAndRecord(manifest, "git diff --check", args);
-  writeManifest(filePath, manifest);
-  if (diffStatus !== 0) hadFailure = true;
-  if (diffStatus !== 0 && !args["keep-going"]) process.exit(diffStatus);
+  const diffCommand = dirtyPolicy === "owned-files-only" ? ownedDiffCheckCommand(manifest) : "git diff --check";
+  if (diffCommand) {
+    const diffStatus = runAndRecord(manifest, diffCommand, args);
+    writeManifest(filePath, manifest);
+    if (diffStatus !== 0) hadFailure = true;
+    if (diffStatus !== 0 && !args["keep-going"]) process.exit(diffStatus);
+  } else {
+    appendRun(
+      manifest,
+      makeRunRecord(
+        "git diff --check",
+        "skipped",
+        null,
+        new Date().toISOString(),
+        0,
+        "dirtyPolicy=owned-files-only and no ownedFiles were listed",
+      ),
+    );
+    writeManifest(filePath, manifest);
+  }
 
   commandFinish({ ...args, file: filePath }, config);
   if (hadFailure) process.exit(1);
@@ -607,6 +730,9 @@ try {
       break;
     case "record-check":
       commandRecordCheck(args, config);
+      break;
+    case "record-evidence":
+      commandRecordEvidence(args, config);
       break;
     case "close":
       commandClose(args, config);

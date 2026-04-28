@@ -225,7 +225,9 @@ npm run manifest -- new \
 
 Run detect immediately after manifest creation. This catches wrong schema,
 placeholder fields, missing required check disposition, and dirty files outside
-the manifest before implementation starts:
+the manifest before implementation starts. Reconciliation manifests default to
+`dirtyPolicy=owned-files-only`, so unrelated dirty files are recorded as
+external state instead of failing the slice:
 
 ```bash
 npm run manifest -- detect \
@@ -242,6 +244,18 @@ npm run manifest -- run-check \
   --cmd="npm test"
 ```
 
+Record manual terminal, TUI, or operator evidence without pretending it was an
+automated check:
+
+```bash
+npm run manifest -- record-evidence \
+  --config=apex.workflow.json \
+  --slug=app-123-thing \
+  --kind=manual-terminal \
+  --summary="Inspector resumed the real session id and side panel loaded" \
+  --source="local TUI"
+```
+
 Close a slice with the generic control-plane path:
 
 ```bash
@@ -252,7 +266,10 @@ npm run manifest -- close \
 ```
 
 `close` runs detect, runs and records required manifest checks, records
-`git diff --check`, and prints the finish packet.
+`git diff --check`, and prints the finish packet. With
+`dirtyPolicy=owned-files-only`, the diff check is scoped to `ownedFiles`; if no
+owned files are listed, it records a skipped diff-check entry instead of
+testing unrelated dirty work.
 
 Generate a handoff packet from the manifest:
 

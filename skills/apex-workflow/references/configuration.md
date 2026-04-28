@@ -135,3 +135,17 @@ node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
 
 `close` runs detect, required manifest checks, `git diff --check`, records the
 results in `checks.runs`, and prints a finish packet from recorded evidence.
+With `dirtyPolicy=owned-files-only`, `close` scopes `git diff --check` to
+`ownedFiles`; if no owned files are listed, it records a skipped diff-check
+entry instead of checking unrelated dirty work.
+
+Record terminal, TUI, or operator evidence separately from automated commands:
+
+```bash
+node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+  record-evidence \
+  --config=apex.workflow.json \
+  --slug=<slice> \
+  --kind=manual-terminal \
+  --summary="TUI resumed the real session id and side panel loaded"
+```
