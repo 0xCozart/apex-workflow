@@ -2,18 +2,22 @@
 
 Use this when adopting Apex Workflow in a new app repo.
 
+During local development, run `npm link` from the Apex repo once. Target repos
+can then use the `apex-*` commands shown below. Inside the Apex repo, the
+matching `npm run` scripts remain available for maintainers.
+
 ## 1. Default Harness Install
 
-Run the installer from the Apex repo:
+Run the installer:
 
 ```bash
-npm run init -- --target=/path/to/app
+apex-init --target=/path/to/app
 ```
 
 For non-interactive agent installs, pass the target repo choices explicitly:
 
 ```bash
-npm run init -- \
+apex-init \
   --target=/path/to/app \
   --config-mode=custom \
   --tracker=none \
@@ -36,7 +40,7 @@ The installer will:
 Run the doctor before the first implementation slice:
 
 ```bash
-npm run doctor -- --target=/path/to/app --config=apex.workflow.json
+apex-doctor --target=/path/to/app --config=apex.workflow.json
 ```
 
 Treat failures as setup work, not product implementation work.
@@ -83,8 +87,8 @@ If the install report says `baseline checkpoint: commit AGENTS.md/apex.workflow.
 Create manifests by slug so `manifest.defaultDir` owns the artifact location:
 
 ```bash
-npm run manifest -- new --config=apex.workflow.json --slug=app-123-slice ...
-npm run manifest -- detect --config=apex.workflow.json --slug=app-123-slice
+apex-manifest new --config=apex.workflow.json --slug=app-123-slice ...
+apex-manifest detect --config=apex.workflow.json --slug=app-123-slice
 ```
 
 Run detect before implementation starts. In search-only repos, the built-in
@@ -102,19 +106,19 @@ intentionally commits selected tmp manifests.
 Record verification outcomes as they run:
 
 ```bash
-npm run manifest -- run-check --config=apex.workflow.json --slug=app-123-slice --cmd="npm test"
+apex-manifest run-check --config=apex.workflow.json --slug=app-123-slice --cmd="npm test"
 ```
 
 Record manual terminal/TUI evidence separately from automated checks:
 
 ```bash
-npm run manifest -- record-evidence --config=apex.workflow.json --slug=app-123-slice --kind=manual-terminal --summary="TUI launched with selected provider and resumed the real session id"
+apex-manifest record-evidence --config=apex.workflow.json --slug=app-123-slice --kind=manual-terminal --summary="TUI launched with selected provider and resumed the real session id"
 ```
 
 Record GitNexus freshness evidence for GitNexus-enabled non-tiny code slices:
 
 ```bash
-npm run manifest -- record-gitnexus-freshness --config=apex.workflow.json --slug=app-123-slice --phase=pre-status --status=fresh --command="npm run gitnexus:status"
+apex-manifest record-gitnexus-freshness --config=apex.workflow.json --slug=app-123-slice --phase=pre-status --status=fresh --command="npm run gitnexus:status"
 ```
 
 If status is stale or missing, refresh and record `--phase=pre-refresh`. Before
@@ -124,7 +128,7 @@ finish, record either `--phase=post-refresh` for graph-relevant code changes or
 Finish with a generated packet:
 
 ```bash
-npm run manifest -- close --config=apex.workflow.json --slug=app-123-slice --next=none
+apex-manifest close --config=apex.workflow.json --slug=app-123-slice --next=none
 ```
 
 ## 3. Repo Rules
@@ -147,7 +151,7 @@ when only one app's authority chain changed.
 The installer symlinks:
 
 ```text
-/mnt/d/CURSOR/apex-workflow/skills/apex-workflow
+<apex-workflow-repo>/skills/apex-workflow
 ```
 
 into the Codex skills directory used by the machine.

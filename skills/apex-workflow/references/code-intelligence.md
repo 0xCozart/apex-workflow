@@ -51,7 +51,7 @@ the slice manifest before `close` or standalone `finish`:
 Record the gate explicitly:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   record-gitnexus-freshness \
   --config=apex.workflow.json \
   --slug=<slice> \

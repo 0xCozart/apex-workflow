@@ -25,7 +25,7 @@ If no profile exists, use `templates/apex.workflow.json` as the expected shape
 and run the harness installer when the Apex repo is available:
 
 ```bash
-npm run init -- --target=/path/to/app
+apex-init --target=/path/to/app
 ```
 
 If the user did not specify setup mode, ask one question first:
@@ -44,7 +44,7 @@ When the user asks to install Apex Workflow from a GitHub repo or local clone:
 
 1. Clone or open the Apex Workflow repo.
 2. Identify the target app repo.
-3. Run `npm run init -- --target=<target-app>`.
+3. Run `apex-init --target=<target-app>`.
 4. Use flags for known choices:
    - `--tracker=none|linear|github|file`
    - `--code-intelligence=auto|focused-search|gitnexus-mcp|gitnexus-wrapper`
@@ -54,7 +54,7 @@ When the user asks to install Apex Workflow from a GitHub repo or local clone:
 6. Run the readiness doctor from the target repo when available:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-doctor.mjs \
+apex-doctor \
   --config=apex.workflow.json \
   --target=.
 ```
@@ -89,7 +89,7 @@ For every meaningful code-facing slice, create or update a manifest through the
 configured helper. Default command when this repo is available:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   new \
   --config=apex.workflow.json \
   --slug=<slice> \
@@ -116,7 +116,7 @@ The manifest owns:
 Use the manifest for scoped changed-file analysis:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   detect \
   --config=apex.workflow.json \
   --slug=<slice>
@@ -173,7 +173,7 @@ Use the profile's `manifest.finishPacket`. Default:
 Generate the packet from the manifest when the helper is available:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   finish \
   --config=apex.workflow.json \
   --slug=<slice> \
@@ -187,7 +187,7 @@ node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
 Prefer recording checks into the manifest instead of only listing commands:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   run-check \
   --config=apex.workflow.json \
   --slug=<slice> \
@@ -198,7 +198,7 @@ For manual terminal, TUI, or operator evidence, record evidence instead of
 pretending it was an automated check:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   record-evidence \
   --config=apex.workflow.json \
   --slug=<slice> \
@@ -211,7 +211,7 @@ For GitNexus-enabled non-tiny code slices, record freshness gate evidence before
 close:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   record-gitnexus-freshness \
   --config=apex.workflow.json \
   --slug=<slice> \
@@ -229,7 +229,7 @@ At the end of a slice, use `close` when the target repo can run the manifest's
 required commands:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   close \
   --config=apex.workflow.json \
   --slug=<slice> \

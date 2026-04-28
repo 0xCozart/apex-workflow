@@ -26,6 +26,19 @@ function run(args, options = {}) {
   return result;
 }
 
+function runCommand(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd ?? APEX_ROOT,
+    encoding: "utf8",
+    stdio: "pipe",
+    env: { ...process.env, ...(options.env ?? {}) },
+  });
+  if (!options.allowFailure && result.status !== 0) {
+    throw new Error(`${command} ${args.join(" ")} failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  }
+  return result;
+}
+
 function git(target, args) {
   return spawnSync("git", args, {
     cwd: target,
@@ -420,6 +433,60 @@ function testDryRunNoWrites(root) {
   assert(!readFileSync(join(target, ".gitignore"), "utf8").includes("# apex-workflow:start"), "dry-run should not update .gitignore");
 }
 
+function testPortableCliEntrypoints(root) {
+  const packRoot = join(root, "pack");
+  const installRoot = join(root, "cli-install");
+  const target = makeTarget(root, "no-adapters", "portable-cli-target");
+  const skillDir = join(root, "portable-cli-skills");
+  mkdirSync(packRoot, { recursive: true });
+  mkdirSync(installRoot, { recursive: true });
+  writeFileSync(join(installRoot, "package.json"), JSON.stringify({ private: true }, null, 2));
+
+  const npmEnv = { npm_config_cache: join(root, "npm-cache") };
+  const pack = runCommand("npm", ["pack", "--pack-destination", packRoot, "--silent"], { env: npmEnv });
+  const tarball = join(packRoot, pack.stdout.trim().split("\n").pop());
+  runCommand("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball], { cwd: installRoot, env: npmEnv });
+
+  const binDir = join(installRoot, "node_modules/.bin");
+  const apexInit = join(binDir, "apex-init");
+  const apexDoctor = join(binDir, "apex-doctor");
+  const apexManifest = join(binDir, "apex-manifest");
+  const apexCheckConfig = join(binDir, "apex-check-config");
+
+  runCommand(apexInit, [
+    `--target=${target}`,
+    `--skill-dir=${skillDir}`,
+    "--config-mode=custom",
+    "--tracker=none",
+    "--code-intelligence=focused-search",
+    "--browser=none",
+    "--yes",
+  ]);
+
+  runCommand(apexCheckConfig, ["--config=apex.workflow.json", "--target=."], { cwd: target });
+  assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["add", "."]).status === 0, "git add failed");
+  assert(
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    "git commit failed",
+  );
+  runCommand(apexDoctor, [`--target=${target}`, "--config=apex.workflow.json", `--skill-dir=${skillDir}`, "--skip-commands"]);
+  runCommand(apexManifest, [
+    "new",
+    "--config=apex.workflow.json",
+    "--slug=portable-cli",
+    "--issue=none",
+    "--mode=planning",
+    "--surface=fixture docs",
+    "--downshift=planning: cli shim smoke test",
+  ], { cwd: target });
+}
+
+function testPortabilityScan() {
+  const result = run([join(APEX_ROOT, "scripts/check-portability.mjs")]);
+  assert(result.stdout.includes("[apex-portability] ok"), "portability scan should pass");
+}
+
 function main() {
   mkdirSync(join(APEX_ROOT, "tmp"), { recursive: true });
   const root = mkdtempSync(join(APEX_ROOT, "tmp/apex-installer-fixtures-"));
@@ -433,6 +500,8 @@ function main() {
     testExistingAgentsManagedBlock(root);
     testPathCasingMismatch(root);
     testDryRunNoWrites(root);
+    testPortableCliEntrypoints(root);
+    testPortabilityScan();
     console.log("[apex-fixtures] ok");
   } finally {
     rmSync(root, { recursive: true, force: true });

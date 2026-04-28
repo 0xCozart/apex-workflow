@@ -106,6 +106,12 @@ APEX WORKFLOW CONTROL PLANE
 
 ## Install
 
+From the Apex repo, make the local CLI shims available during development:
+
+```bash
+npm link
+```
+
 Ask the agent installing Apex one setup question:
 
 ```text
@@ -115,13 +121,13 @@ Auto-configure from repo evidence, or choose tracker/GitNexus/browser options?
 Auto mode:
 
 ```bash
-npm run init -- --target=/path/to/app --config-mode=auto --yes
+apex-init --target=/path/to/app --config-mode=auto --yes
 ```
 
 Custom mode:
 
 ```bash
-npm run init -- \
+apex-init \
   --target=/path/to/app \
   --config-mode=custom \
   --tracker=linear \
@@ -140,7 +146,7 @@ It also prints an install report: inferred authority paths with confidence, adap
 Before the first implementation slice, run the doctor against the target repo:
 
 ```bash
-npm run doctor -- --target=/path/to/app --config=apex.workflow.json
+apex-doctor --target=/path/to/app --config=apex.workflow.json
 ```
 
 The doctor checks unresolved setup review items, guessed inferred paths, whether `tmp/apex-workflow/` is ignored, the managed `AGENTS.md` block, adapter readiness, the local skill symlink, and whether the installed setup has a clean baseline checkpoint.
@@ -214,7 +220,7 @@ Install-time repo evidence can detect wrapper scripts or GitNexus markers, but h
 Use the configured manifest directory instead of hand-writing `tmp/apex-workflow` paths:
 
 ```bash
-npm run manifest -- new \
+apex-manifest new \
   --config=apex.workflow.json \
   --slug=app-123-thing \
   --issue=APP-123 \
@@ -230,7 +236,7 @@ the manifest before implementation starts. Reconciliation manifests default to
 external state instead of failing the slice:
 
 ```bash
-npm run manifest -- detect \
+apex-manifest detect \
   --config=apex.workflow.json \
   --slug=app-123-thing
 ```
@@ -238,7 +244,7 @@ npm run manifest -- detect \
 Record checks as executable evidence:
 
 ```bash
-npm run manifest -- run-check \
+apex-manifest run-check \
   --config=apex.workflow.json \
   --slug=app-123-thing \
   --cmd="npm test"
@@ -248,7 +254,7 @@ Record manual terminal, TUI, or operator evidence without pretending it was an
 automated check:
 
 ```bash
-npm run manifest -- record-evidence \
+apex-manifest record-evidence \
   --config=apex.workflow.json \
   --slug=app-123-thing \
   --kind=manual-terminal \
@@ -260,7 +266,7 @@ For GitNexus-enabled non-tiny code slices, record freshness evidence before
 close:
 
 ```bash
-npm run manifest -- record-gitnexus-freshness \
+apex-manifest record-gitnexus-freshness \
   --config=apex.workflow.json \
   --slug=app-123-thing \
   --phase=pre-status \
@@ -277,7 +283,7 @@ skip reason.
 Close a slice with the generic control-plane path:
 
 ```bash
-npm run manifest -- close \
+apex-manifest close \
   --config=apex.workflow.json \
   --slug=app-123-thing \
   --next="APP-124"
@@ -294,7 +300,7 @@ evidence.
 Generate a handoff packet from the manifest:
 
 ```bash
-npm run manifest -- finish \
+apex-manifest finish \
   --config=apex.workflow.json \
   --slug=app-123-thing \
   --verified="npm test" \
@@ -355,10 +361,17 @@ apex-workflow/
 ## Local Verification
 
 ```bash
+npm run check:syntax
+npm run check:portability
 npm run check:config
 npm run test:fixtures
 npm run self-check
 ```
+
+`self-check` is clean-room runnable: it validates the repo-local service-desk
+fixture and uses temporary fixture repos instead of any private target app.
+Private app profile validation belongs in guarded scripts such as
+`MINTY_TARGET=/path/to/private/repo npm run check:minty`.
 
 ## The Philosophy
 

@@ -22,15 +22,15 @@ Apex Workflow is configured by `apex.workflow.json`.
 Run from the Apex repo:
 
 ```bash
-node scripts/check-config.mjs --config=profiles/minty.workflow.json
+npm run check:config
 ```
 
 Validate paths against a target app:
 
 ```bash
-node scripts/check-config.mjs \
+apex-check-config \
   --config=profiles/minty.workflow.json \
-  --target=/mnt/d/CURSOR/minty
+  --target=/path/to/app
 ```
 
 ## Harness Init
@@ -38,13 +38,13 @@ node scripts/check-config.mjs \
 For a target app that does not have a profile yet, run:
 
 ```bash
-npm run init -- --target=/path/to/app
+apex-init --target=/path/to/app
 ```
 
 For non-interactive agent installs, pass explicit adapter choices:
 
 ```bash
-npm run init -- \
+apex-init \
   --target=/path/to/app \
   --config-mode=auto \
   --yes
@@ -53,7 +53,7 @@ npm run init -- \
 If the user wants to choose options:
 
 ```bash
-npm run init -- \
+apex-init \
   --target=/path/to/app \
   --config-mode=custom \
   --tracker=none \
@@ -96,7 +96,7 @@ Use the doctor to answer whether the target repo is ready for its first
 implementation slice:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-doctor.mjs \
+apex-doctor \
   --target=/path/to/app \
   --config=apex.workflow.json
 ```
@@ -116,7 +116,7 @@ durable artifacts.
 Use `apex-manifest run-check` to record command results into the manifest:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   run-check \
   --config=apex.workflow.json \
   --slug=<slice> \
@@ -126,7 +126,7 @@ node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
 Use `apex-manifest close` for generic slice closeout:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   close \
   --config=apex.workflow.json \
   --slug=<slice> \
@@ -142,7 +142,7 @@ entry instead of checking unrelated dirty work.
 Record terminal, TUI, or operator evidence separately from automated commands:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   record-evidence \
   --config=apex.workflow.json \
   --slug=<slice> \
@@ -153,7 +153,7 @@ node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
 Record GitNexus freshness separately from verification commands:
 
 ```bash
-node /mnt/d/CURSOR/apex-workflow/scripts/apex-manifest.mjs \
+apex-manifest \
   record-gitnexus-freshness \
   --config=apex.workflow.json \
   --slug=<slice> \

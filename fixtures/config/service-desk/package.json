@@ -1,0 +1,7 @@
+{
+  "name": "service-desk-fixture",
+  "private": true,
+  "scripts": {
+    "test": "node --version"
+  }
+}
