@@ -18,7 +18,8 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const APEX_ROOT = resolve(SCRIPT_DIR, "..");
 const START_MARKER = "<!-- apex-workflow:start -->";
 const END_MARKER = "<!-- apex-workflow:end -->";
-const COMMAND_KEY_PATTERN = /(?:^|\.)(?:.*Command|.*Commands|detectCommand|statusCommand|refreshCommand|queryCommand|contextCommand|impactCommand|checkCommand)$/;
+const COMMAND_KEY_PATTERN =
+  /(?:^|\.)(?:.*Command|.*Commands|detectCommand|statusCommand|refreshCommand|queryCommand|contextCommand|impactCommand|checkCommand)$/;
 const SUSPICIOUS_SHELL_PATTERN = /(?:&&|\|\||;|`|\$\(|\|)/;
 
 function usage(exitCode = 0) {
@@ -63,8 +64,8 @@ function add(checks, status, label, detail) {
   checks.push({ status, label, detail });
 }
 
-function run(command, cwd) {
-  const result = runTrustedCommand(command, {
+async function run(command, cwd) {
+  const result = await runTrustedCommand(command, {
     cwd,
     commandSource: "doctor-status",
     timeoutMs: 120000,
@@ -102,7 +103,9 @@ function collectStringEntries(value, prefix = "") {
   if (Array.isArray(value)) {
     return value.flatMap((entry, index) => collectStringEntries(entry, `${prefix}[${index}]`));
   }
-  return Object.entries(value).flatMap(([key, entry]) => collectStringEntries(entry, prefix ? `${prefix}.${key}` : key));
+  return Object.entries(value).flatMap(([key, entry]) =>
+    collectStringEntries(entry, prefix ? `${prefix}.${key}` : key),
+  );
 }
 
 function checkTrustBoundary(checks, config) {
@@ -119,13 +122,18 @@ function checkTrustBoundary(checks, config) {
     add(checks, "pass", "executable trust boundary", "no configured command values found");
   }
 
-  const suspicious = strings.filter((entry) => !isCommandPath(entry.path) && SUSPICIOUS_SHELL_PATTERN.test(entry.value));
+  const suspicious = strings.filter(
+    (entry) => !isCommandPath(entry.path) && SUSPICIOUS_SHELL_PATTERN.test(entry.value),
+  );
   if (suspicious.length > 0) {
     add(
       checks,
       "warn",
       "suspicious non-command strings",
-      suspicious.map((entry) => entry.path).slice(0, 8).join("; "),
+      suspicious
+        .map((entry) => entry.path)
+        .slice(0, 8)
+        .join("; "),
     );
   } else {
     add(checks, "pass", "suspicious non-command strings", "none found");
@@ -145,11 +153,16 @@ function checkGitignored(targetRoot, pathToCheck) {
     .filter((line) => line && !line.startsWith("#"))
     .some((line) => {
       const normalized = line.replace(/^\//, "");
-      return normalized === "tmp/" || normalized === "tmp" || normalized === "tmp/apex-workflow/" || normalized === "tmp/apex-workflow";
+      return (
+        normalized === "tmp/" ||
+        normalized === "tmp" ||
+        normalized === "tmp/apex-workflow/" ||
+        normalized === "tmp/apex-workflow"
+      );
     });
 }
 
-function commandCheck(checks, label, command, targetRoot, args) {
+async function commandCheck(checks, label, command, targetRoot, args) {
   if (!command) {
     add(checks, "warn", label, "no status command is configured; verify host connector availability in-session");
     return;
@@ -159,25 +172,31 @@ function commandCheck(checks, label, command, targetRoot, args) {
     return;
   }
 
-  const result = run(command, targetRoot);
+  const result = await run(command, targetRoot);
   if (result.status === 0) add(checks, "pass", label, command);
-  else add(checks, "fail", label, `${command} exited ${result.status ?? "unknown"}${result.stderr ? `: ${result.stderr.trim()}` : ""}`);
+  else
+    add(
+      checks,
+      "fail",
+      label,
+      `${command} exited ${result.status ?? "unknown"}${result.stderr ? `: ${result.stderr.trim()}` : ""}`,
+    );
 }
 
-function checkTracker(checks, config, targetRoot, args) {
+async function checkTracker(checks, config, targetRoot, args) {
   const tracker = config.tracker ?? {};
   if (!tracker.provider || tracker.provider === "none") {
     add(checks, "pass", "tracker readiness", "tracker provider is none");
     return;
   }
-  commandCheck(checks, "tracker readiness", tracker.statusCommand ?? tracker.checkCommand, targetRoot, args);
+  await commandCheck(checks, "tracker readiness", tracker.statusCommand ?? tracker.checkCommand, targetRoot, args);
 }
 
 function wrapperReady(wrapper) {
   return Boolean(wrapper?.enabled && (wrapper.statusCommand || wrapper.queryCommand || wrapper.detectCommand));
 }
 
-function checkCodeIntelligence(checks, config, targetRoot, args) {
+async function checkCodeIntelligence(checks, config, targetRoot, args) {
   const code = config.codeIntelligence ?? {};
   const availability = code.availability ?? {};
   const provider = code.provider ?? "missing";
@@ -203,17 +222,29 @@ function checkCodeIntelligence(checks, config, targetRoot, args) {
   }
 
   if (provider === "gitnexus-wrapper" || wrapperReady(code.wrapperFallback)) {
-    commandCheck(checks, "GitNexus wrapper readiness", code.wrapperFallback?.statusCommand ?? code.statusCommand, targetRoot, args);
+    await commandCheck(
+      checks,
+      "GitNexus wrapper readiness",
+      code.wrapperFallback?.statusCommand ?? code.statusCommand,
+      targetRoot,
+      args,
+    );
   }
 }
 
-function checkBrowser(checks, config, targetRoot, args) {
+async function checkBrowser(checks, config, targetRoot, args) {
   const browser = config.verification?.browser ?? {};
   if (!browser.provider || browser.provider === "none") {
     add(checks, "pass", "browser readiness", "browser provider is none");
     return;
   }
-  commandCheck(checks, "browser readiness", browser.statusCommand ?? browser.checkCommand ?? "command -v agent-browser", targetRoot, args);
+  await commandCheck(
+    checks,
+    "browser readiness",
+    browser.statusCommand ?? browser.checkCommand ?? "command -v agent-browser",
+    targetRoot,
+    args,
+  );
 }
 
 function checkSkillLink(checks, config, args) {
@@ -256,10 +287,7 @@ function checkBaseline(checks, targetRoot) {
 }
 
 function codebaseMapRefs(config) {
-  return [
-    ...(config.orientation?.readBeforeBroadSearch ?? []),
-    ...(config.authority?.workflowRules ?? []),
-  ]
+  return [...(config.orientation?.readBeforeBroadSearch ?? []), ...(config.authority?.workflowRules ?? [])]
     .map((entry) => (typeof entry === "string" ? entry.split("#")[0].trim() : ""))
     .filter((entry) => entry === DEFAULT_CODEBASE_MAP_PATH || /(^|\/)CODEBASE_MAP\.md$/i.test(entry));
 }
@@ -281,7 +309,8 @@ function readMapEvaluation(targetRoot, config) {
   return {
     refs,
     exists: true,
-    reviewed: evaluation.status === "reviewed" && evaluation.errors.length === 0 && evaluation.reviewMarkers.length === 0,
+    reviewed:
+      evaluation.status === "reviewed" && evaluation.errors.length === 0 && evaluation.reviewMarkers.length === 0,
     evaluation,
   };
 }
@@ -313,16 +342,20 @@ function checkCodebaseMap(checks, targetRoot, config, mapEvaluation) {
 }
 
 function runConfigCheck(checks, configPath, targetRoot) {
-  const result = spawnSync(process.execPath, [join(APEX_ROOT, "scripts/check-config.mjs"), `--config=${configPath}`, `--target=${targetRoot}`], {
-    cwd: targetRoot,
-    encoding: "utf8",
-  });
+  const result = spawnSync(
+    process.execPath,
+    [join(APEX_ROOT, "scripts/check-config.mjs"), `--config=${configPath}`, `--target=${targetRoot}`],
+    {
+      cwd: targetRoot,
+      encoding: "utf8",
+    },
+  );
 
   if (result.status === 0) add(checks, "pass", "profile validation", "check-config passed");
   else add(checks, "fail", "profile validation", (result.stderr || result.stdout || "check-config failed").trim());
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const targetRoot = resolve(process.cwd(), String(args.target ?? "."));
   const configPath = resolveInsideRoot(targetRoot, String(args.config ?? "apex.workflow.json"), {
@@ -339,12 +372,12 @@ function main() {
   const mapEvaluation = readMapEvaluation(targetRoot, config);
 
   const reviewNeeded = config.setup?.reviewNeeded ?? [];
-  const generatedMapReviewResolved =
-    reviewNeeded.includes(GENERATED_MAP_DRAFT_REVIEW_ITEM) && mapEvaluation?.reviewed;
+  const generatedMapReviewResolved = reviewNeeded.includes(GENERATED_MAP_DRAFT_REVIEW_ITEM) && mapEvaluation?.reviewed;
   const activeReviewNeeded = generatedMapReviewResolved
     ? reviewNeeded.filter((item) => item !== GENERATED_MAP_DRAFT_REVIEW_ITEM)
     : reviewNeeded;
-  if (activeReviewNeeded.length === 0) add(checks, "pass", "setup.reviewNeeded", "no unresolved installer review items");
+  if (activeReviewNeeded.length === 0)
+    add(checks, "pass", "setup.reviewNeeded", "no unresolved installer review items");
   else add(checks, "fail", "setup.reviewNeeded", activeReviewNeeded.join("; "));
   if (generatedMapReviewResolved) {
     add(
@@ -372,9 +405,9 @@ function main() {
     add(checks, "fail", "AGENTS managed block", "AGENTS.md is missing the Apex managed block");
   }
 
-  checkTracker(checks, config, targetRoot, args);
-  checkCodeIntelligence(checks, config, targetRoot, args);
-  checkBrowser(checks, config, targetRoot, args);
+  await checkTracker(checks, config, targetRoot, args);
+  await checkCodeIntelligence(checks, config, targetRoot, args);
+  await checkBrowser(checks, config, targetRoot, args);
   checkCodebaseMap(checks, targetRoot, config, mapEvaluation);
   checkSkillLink(checks, config, args);
   checkBaseline(checks, targetRoot);
@@ -418,7 +451,7 @@ function main() {
 }
 
 try {
-  main();
+  await main();
 } catch (error) {
   console.error(`[apex-doctor] ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);

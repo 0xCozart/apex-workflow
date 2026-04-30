@@ -24,14 +24,14 @@ function isInside(root, candidate) {
   const relativePath = relative(root, candidate);
   return (
     relativePath === "" ||
-    (!relativePath.startsWith("..") &&
-      !isAbsolute(relativePath) &&
-      !relativePath.match(/^[A-Za-z]:/))
+    (!relativePath.startsWith("..") && !isAbsolute(relativePath) && !relativePath.match(/^[A-Za-z]:/))
   );
 }
 
 export function normalizeRepoPath(value) {
-  return String(value ?? "").replace(/\\/g, "/").replace(/^\.\/+/, "");
+  return String(value ?? "")
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "");
 }
 
 export function repoRelative(root, absolutePath) {

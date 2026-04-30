@@ -1,23 +1,24 @@
 ---
 name: apex-workflow
-description: Use for configurable, high-rigor app execution across repos. Selects the lightest safe workflow mode from an app profile, creates or uses a slice manifest, and routes product, tracker, code-intelligence, UI/UX, and verification gates without hard-coding one app's rules.
+description:
+  Use for configurable, high-rigor app execution across repos. Selects the lightest safe workflow mode from an app
+  profile, creates or uses a slice manifest, and routes product, tracker, code-intelligence, UI/UX, and verification
+  gates without hard-coding one app's rules.
 ---
 
 # Apex Workflow
 
 Configurable execution harness for app work.
 
-Use this skill when a repo wants Minty-grade rigor without Minty-specific names.
-The app profile is the source of app-specific truth. The skill supplies the
-workflow kernel.
+Use this skill when a repo wants Minty-grade rigor without Minty-specific names. The app profile is the source of
+app-specific truth. The skill supplies the workflow kernel.
 
 ## Trust Boundary
 
-Apex profiles and manifests are trusted executable workflow configuration.
-Commands declared in the profile, manifest, or CLI arguments may be run by
-`apex-manifest`, `apex-doctor`, and adapter fallbacks. Do not run Apex against
-untrusted profiles, manifests, or repositories without reviewing the commands
-first. Do not store secrets in profiles, manifests, logs, or finish packets.
+Apex profiles and manifests are trusted executable workflow configuration. Commands declared in the profile, manifest,
+or CLI arguments may be run by `apex-manifest`, `apex-doctor`, and adapter fallbacks. Do not run Apex against untrusted
+profiles, manifests, or repositories without reviewing the commands first. Do not store secrets in profiles, manifests,
+logs, or finish packets.
 
 ## Read First
 
@@ -34,13 +35,11 @@ first. Do not store secrets in profiles, manifests, logs, or finish packets.
 apex-map-codebase --target=. --write
 ```
 
-Draft maps are scaffolds, not authority. Treat `docs/CODEBASE_MAP.md` as a
-reviewed orientation authority only when it has `Status: reviewed`, no
-`REVIEW NEEDED` markers, and `apex-map-codebase --check --require-reviewed`
-passes.
+Draft maps are scaffolds, not authority. Treat `docs/CODEBASE_MAP.md` as a reviewed orientation authority only when it
+has `Status: reviewed`, no `REVIEW NEEDED` markers, and `apex-map-codebase --check --require-reviewed` passes.
 
-If no profile exists, use `templates/apex.workflow.json` as the expected shape
-and run the harness installer when the Apex repo is available:
+If no profile exists, use `templates/apex.workflow.json` as the expected shape and run the harness installer when the
+Apex repo is available:
 
 ```bash
 apex-init --target=/path/to/app
@@ -52,9 +51,8 @@ If the user did not specify setup mode, ask one question first:
 Auto-configure from repo evidence, or choose tracker/GitNexus/browser options?
 ```
 
-If the user chooses auto, run with `--config-mode=auto --yes`. If they choose
-custom, collect only the adapter choices needed and pass them as flags with
-`--config-mode=custom --yes`.
+If the user chooses auto, run with `--config-mode=auto --yes`. If they choose custom, collect only the adapter choices
+needed and pass them as flags with `--config-mode=custom --yes`.
 
 ## Harness Installation
 
@@ -67,8 +65,7 @@ When the user asks to install Apex Workflow from a GitHub repo or local clone:
    - `--tracker=none|linear|github|file`
    - `--code-intelligence=auto|focused-search|gitnexus-mcp|gitnexus-wrapper`
    - `--browser=auto|none|agent-browser`
-5. Confirm that `apex.workflow.json` validates and that the target `AGENTS.md`
-   has the managed Apex block.
+5. Confirm that `apex.workflow.json` validates and that the target `AGENTS.md` has the managed Apex block.
 6. Run the readiness doctor from the target repo when available:
 
 ```bash
@@ -77,20 +74,17 @@ apex-doctor \
   --target=.
 ```
 
-7. Read the install report. Before the first implementation slice, resolve or
-   consciously accept `setup.reviewNeeded`, confirm any `setup.inferredPaths`
-   marked `guessed`, and preserve any `operatorCautions`.
-8. If the installer generated a draft codebase map, review it, remove
-   `REVIEW NEEDED` markers, then run:
+7. Read the install report. Before the first implementation slice, resolve or consciously accept `setup.reviewNeeded`,
+   confirm any `setup.inferredPaths` marked `guessed`, and preserve any `operatorCautions`.
+8. If the installer generated a draft codebase map, review it, remove `REVIEW NEEDED` markers, then run:
 
 ```bash
 apex-map-codebase --target=. --mark-reviewed --sync-profile
 apex-map-codebase --target=. --check --require-reviewed
 ```
 
-Do not treat skill installation as complete until the target repo has a profile.
-When GitNexus is selected, prefer `gitnexus-mcp`. Use `gitnexus-wrapper` only
-when MCP is blocked or unreliable for that target environment.
+Do not treat skill installation as complete until the target repo has a profile. When GitNexus is selected, prefer
+`gitnexus-mcp`. Use `gitnexus-wrapper` only when MCP is blocked or unreliable for that target environment.
 
 ## Mode Selection
 
@@ -105,13 +99,13 @@ Default mode meanings:
 - `planning`: product/design/architecture decision before code
 - `reconciliation`: implementation appears done; remaining work is tracker, review, audit, or wait state
 
-Downshift aggressively. Use the lightest mode that still preserves ownership,
-contracts, impact, tracker disposition, verification, and finish evidence.
+Downshift aggressively. Use the lightest mode that still preserves ownership, contracts, impact, tracker disposition,
+verification, and finish evidence.
 
 ## Required Manifest
 
-For every meaningful code-facing slice, create or update a manifest through the
-configured helper. Default command when this repo is available:
+For every meaningful code-facing slice, create or update a manifest through the configured helper. Default command when
+this repo is available:
 
 ```bash
 apex-manifest \
@@ -147,19 +141,17 @@ apex-manifest \
   --slug=<slice>
 ```
 
-Run this immediately after creating the manifest and before implementation.
-If no repo-specific `detectCommand` is configured, the helper still runs
-built-in coverage: manifest schema, dirty changed files versus `ownedFiles`,
-the manifest artifact exception, and missing-owned-file warnings.
-Reconciliation manifests use `dirtyPolicy=owned-files-only` by default:
-unrelated dirty files are recorded as external state, while code-facing modes
-continue to fail on unowned dirty files unless the manifest explicitly chooses
-that policy.
+Run this immediately after creating the manifest and before implementation. If no repo-specific `detectCommand` is
+configured, the helper still runs built-in coverage: manifest schema, dirty changed files versus `ownedFiles`, the
+manifest artifact exception, and missing-owned-file warnings. Reconciliation manifests use
+`dirtyPolicy=owned-files-only` by default: unrelated dirty files are recorded as external state, while code-facing modes
+continue to fail on unowned dirty files unless the manifest explicitly chooses that policy.
 
 ## Routing Rules
 
 - `tiny`: skip broad routing unless ownership is unclear.
-- `route-local`: read the owner contract or closest surrogate, run focused impact when editing non-trivial symbols, confirm callers with source search when useful.
+- `route-local`: read the owner contract or closest surrogate, run focused impact when editing non-trivial symbols,
+  confirm callers with source search when useful.
 - `shared-surface`: use the profile's contract routing and code-intelligence gates before editing.
 - `issue-resume`: inspect latest tracker/plan/diff state, preserve no-touch surfaces, and verify the first real gap.
 - `planning`: use product authority and write durable plan artifacts only when the decision must survive sessions.
@@ -219,14 +211,11 @@ apex-manifest \
   --cmd="<verification command>"
 ```
 
-Recorded command runs include command source, exit code, timestamps, cwd, git
-metadata, working-tree fingerprints, stdout/stderr tails, and a hashed
-repo-local log path under `tmp/apex-workflow/logs/<slice>/`. If required checks
-are skipped at close, stale evidence must be rerun or explicitly overridden
-with `--allow-stale-evidence="<reason>"`.
+Recorded command runs include command source, exit code, timestamps, cwd, git metadata, working-tree fingerprints,
+stdout/stderr tails, and a hashed repo-local log path under `tmp/apex-workflow/logs/<slice>/`. If required checks are
+skipped at close, stale evidence must be rerun or explicitly overridden with `--allow-stale-evidence="<reason>"`.
 
-For manual terminal, TUI, or operator evidence, record evidence instead of
-pretending it was an automated check:
+For manual terminal, TUI, or operator evidence, record evidence instead of pretending it was an automated check:
 
 ```bash
 apex-manifest \
@@ -238,8 +227,7 @@ apex-manifest \
   --source="<terminal, TUI, device, or operator context>"
 ```
 
-For GitNexus-enabled non-tiny code slices, record freshness gate evidence before
-close:
+For GitNexus-enabled non-tiny code slices, record freshness gate evidence before close:
 
 ```bash
 apex-manifest \
@@ -251,13 +239,11 @@ apex-manifest \
   --command="<GitNexus status command>"
 ```
 
-Refresh before coding when status is stale, missing, or high-risk, then record
-`--phase=pre-refresh`. After the slice, record `--phase=post-refresh` when the
-change affects graph reasoning for the next slice, or `--phase=post-skip` with
-a reason when it does not.
+Refresh before coding when status is stale, missing, or high-risk, then record `--phase=pre-refresh`. After the slice,
+record `--phase=post-refresh` when the change affects graph reasoning for the next slice, or `--phase=post-skip` with a
+reason when it does not.
 
-At the end of a slice, use `close` when the target repo can run the manifest's
-required commands:
+At the end of a slice, use `close` when the target repo can run the manifest's required commands:
 
 ```bash
 apex-manifest \
@@ -267,11 +253,9 @@ apex-manifest \
   --next="<next safe slice>"
 ```
 
-Use `--preview-commands` first when the command surface is unfamiliar or the
-profile came from an unreviewed source.
+Use `--preview-commands` first when the command surface is unfamiliar or the profile came from an unreviewed source.
 
-`close` runs detect, records required check results, records `git diff --check`,
-and prints the finish packet.
+`close` runs detect, records required check results, records `git diff --check`, and prints the finish packet.
 
 ## Common Mistakes
 
@@ -280,7 +264,8 @@ and prints the finish packet.
 - using tracker state as product authority
 - editing shared surfaces before reading contracts
 - running broad dirty-tree analysis and calling it slice proof
-- creating a manifest and leaving defaults like empty `ownedFiles` or `checks.typecheck: TODO`; `detect` will fail until current-slice files and required/skip check dispositions are explicit
+- creating a manifest and leaving defaults like empty `ownedFiles` or `checks.typecheck: TODO`; `detect` will fail until
+  current-slice files and required/skip check dispositions are explicit
 - listing verification commands without recording whether they actually ran
 - treating browser screenshots as visual signoff when the profile says functional-only
 - finishing without a manifest-backed scope and verification summary

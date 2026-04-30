@@ -2,9 +2,8 @@
 
 Use this when adopting Apex Workflow in a new app repo.
 
-During local development, run `npm link` from the Apex repo once. Target repos
-can then use the `apex-*` commands shown below. Inside the Apex repo, the
-matching `npm run` scripts remain available for maintainers.
+During local development, run `npm link` from the Apex repo once. Target repos can then use the `apex-*` commands shown
+below. Inside the Apex repo, the matching `npm run` scripts remain available for maintainers.
 
 ## 1. Default Harness Install
 
@@ -34,7 +33,8 @@ The installer will:
 - write `apex.workflow.json`
 - create or update a managed Apex block in `AGENTS.md`
 - validate the generated profile
-- print a post-install report with inferred path confidence, adapter choices, repo dirty state, and next checkpoint guidance
+- print a post-install report with inferred path confidence, adapter choices, repo dirty state, and next checkpoint
+  guidance
 - symlink the local `apex-workflow` skill unless `--skip-skill-link` is passed
 
 If the target has no broad-search orientation doc, create a draft codebase map:
@@ -49,8 +49,7 @@ Or create the draft during install:
 apex-init --target=/path/to/app --create-codebase-map --yes
 ```
 
-Generated maps are scaffolds. Review `docs/CODEBASE_MAP.md`, resolve every
-`REVIEW NEEDED` marker, then run:
+Generated maps are scaffolds. Review `docs/CODEBASE_MAP.md`, resolve every `REVIEW NEEDED` marker, then run:
 
 ```bash
 cd /path/to/app
@@ -68,15 +67,13 @@ Treat failures as setup work, not product implementation work.
 
 ## Remote Policy
 
-Apex requires a normal Git repo and uses `origin` as the working remote when
-GitHub-backed workflows are needed.
+Apex requires a normal Git repo and uses `origin` as the working remote when GitHub-backed workflows are needed.
 
-A local `upstream` remote is optional. Apex must not fail install, doctor,
-manifest creation, verification, close, or finish-packet generation because
-`upstream` is missing.
+A local `upstream` remote is optional. Apex must not fail install, doctor, manifest creation, verification, close, or
+finish-packet generation because `upstream` is missing.
 
-`upstream` is only relevant for explicit parent-sync, fork-drift comparison, or
-contributing changes back to a parent repository.
+`upstream` is only relevant for explicit parent-sync, fork-drift comparison, or contributing changes back to a parent
+repository.
 
 ## 2. Profile Review
 
@@ -95,11 +92,11 @@ Also review:
 
 - `setup.inferredPaths`: paths marked `guessed` need human or agent confirmation before the first implementation slice.
 - `setup.reviewNeeded`: installer concerns that must be resolved or consciously accepted.
-- `operatorCautions`: human-readable boundaries such as security, secret-handling, or public/private repo limits. These are not authority paths.
+- `operatorCautions`: human-readable boundaries such as security, secret-handling, or public/private repo limits. These
+  are not authority paths.
 
-For GitNexus, prefer `codeIntelligence.provider = "gitnexus-mcp"`. Use the
-wrapper fallback only when MCP is unavailable or unreliable in the target
-environment.
+For GitNexus, prefer `codeIntelligence.provider = "gitnexus-mcp"`. Use the wrapper fallback only when MCP is unavailable
+or unreliable in the target environment.
 
 Review `codeIntelligence.availability` separately from `provider`:
 
@@ -108,19 +105,19 @@ Review `codeIntelligence.availability` separately from `provider`:
 - `currentHostAvailability`: whether this host/session has proven the MCP tools are visible
 - `fallbackCommandReadiness`: whether wrapper commands are configured
 
-If the installer could not infer product truth, contract docs, or broad-search
-orientation, it records that in `setup.reviewNeeded`.
+If the installer could not infer product truth, contract docs, or broad-search orientation, it records that in
+`setup.reviewNeeded`.
 
-If the installer generated a codebase map, it also records a draft-map review
-item in `setup.reviewNeeded`. `apex-map-codebase --mark-reviewed --sync-profile`
-removes only that generated-map item after the map is reviewed; unrelated setup
-concerns remain.
+If the installer generated a codebase map, it also records a draft-map review item in `setup.reviewNeeded`.
+`apex-map-codebase --mark-reviewed --sync-profile` removes only that generated-map item after the map is reviewed;
+unrelated setup concerns remain.
 
-The validator checks required profile paths against the target repo and rejects
-case mismatches such as `docs/ARCHITECTURE.md` when the real file is
-`docs/architecture.md`.
+The validator checks required profile paths against the target repo and rejects case mismatches such as
+`docs/ARCHITECTURE.md` when the real file is `docs/architecture.md`.
 
-If the install report says `baseline checkpoint: commit AGENTS.md/apex.workflow.json setup before the first implementation slice`, do that before starting product code. Mixing harness bootstrap with implementation weakens the first manifest and finish packet.
+If the install report says
+`baseline checkpoint: commit AGENTS.md/apex.workflow.json setup before the first implementation slice`, do that before
+starting product code. Mixing harness bootstrap with implementation weakens the first manifest and finish packet.
 
 Create manifests by slug so `manifest.defaultDir` owns the artifact location:
 
@@ -129,17 +126,14 @@ apex-manifest new --config=apex.workflow.json --slug=app-123-slice ...
 apex-manifest detect --config=apex.workflow.json --slug=app-123-slice
 ```
 
-Run detect before implementation starts. In search-only repos, the built-in
-detect still checks manifest validity and changed-file coverage, so it is useful
-even without GitNexus. Reconciliation manifests default to
-`dirtyPolicy=owned-files-only`: unrelated dirty files are recorded in
-`scope.externalDirtyFiles` and `codeIntelligence.detect.externalDirtyFiles`,
-but they do not fail the slice when the owned-file scope is clean.
+Run detect before implementation starts. In search-only repos, the built-in detect still checks manifest validity and
+changed-file coverage, so it is useful even without GitNexus. Reconciliation manifests default to
+`dirtyPolicy=owned-files-only`: unrelated dirty files are recorded in `scope.externalDirtyFiles` and
+`codeIntelligence.detect.externalDirtyFiles`, but they do not fail the slice when the owned-file scope is clean.
 
-If manifests are durable reviewer or grant evidence, set
-`manifest.defaultDir` to a committed evidence path such as `.apex/manifests` or
-`docs/proof/apex-workflow`. Keep `tmp/apex-workflow` only when the repo
-intentionally commits selected tmp manifests.
+If manifests are durable reviewer or grant evidence, set `manifest.defaultDir` to a committed evidence path such as
+`.apex/manifests` or `docs/proof/apex-workflow`. Keep `tmp/apex-workflow` only when the repo intentionally commits
+selected tmp manifests.
 
 Record verification outcomes as they run:
 
@@ -147,12 +141,10 @@ Record verification outcomes as they run:
 apex-manifest run-check --config=apex.workflow.json --slug=app-123-slice --cmd="npm test"
 ```
 
-Each command run stores a manifest record plus a hashed log file under
-`tmp/apex-workflow/logs/<slice>/`. Reviewers can inspect the manifest tails for
-quick context and open the log path for captured stdout/stderr. Apex redacts
-common token shapes from persisted command strings, tails, and logs. The
-default command timeout is 120000 ms; pass `--timeout-ms=<milliseconds>` for a
-known longer-running trusted check.
+Each command run stores a manifest record plus a hashed log file under `tmp/apex-workflow/logs/<slice>/`. Reviewers can
+inspect the manifest tails for quick context and open the log path for captured stdout/stderr. Apex redacts common token
+shapes from persisted command strings, tails, and logs. The default command timeout is 120000 ms; pass
+`--timeout-ms=<milliseconds>` for a known longer-running trusted check.
 
 Record manual terminal/TUI evidence separately from automated checks:
 
@@ -166,8 +158,8 @@ Record GitNexus freshness evidence for GitNexus-enabled non-tiny code slices:
 apex-manifest record-gitnexus-freshness --config=apex.workflow.json --slug=app-123-slice --phase=pre-status --status=fresh --command="npm run gitnexus:status"
 ```
 
-If status is stale or missing, refresh and record `--phase=pre-refresh`. Before
-finish, record either `--phase=post-refresh` for graph-relevant code changes or
+If status is stale or missing, refresh and record `--phase=pre-refresh`. Before finish, record either
+`--phase=post-refresh` for graph-relevant code changes or
 `--phase=post-skip --status=skipped --reason="<why refresh is unnecessary>"`.
 
 Finish with a generated packet:
@@ -181,15 +173,12 @@ apex-manifest close --config=apex.workflow.json --slug=app-123-slice --next=none
 The installer writes this managed behavior into `AGENTS.md`:
 
 ```md
-Use $apex-workflow for meaningful execution.
-Read apex.workflow.json before selecting a mode.
-Review setup.reviewNeeded, setup.inferredPaths, and operatorCautions.
-For code-facing work, create or update a slice manifest.
-Use the configured tracker and code-intelligence adapters.
+Use $apex-workflow for meaningful execution. Read apex.workflow.json before selecting a mode. Review setup.reviewNeeded,
+setup.inferredPaths, and operatorCautions. For code-facing work, create or update a slice manifest. Use the configured
+tracker and code-intelligence adapters.
 ```
 
-Keep project-specific rules in the target repo. Do not edit `apex-workflow`
-when only one app's authority chain changed.
+Keep project-specific rules in the target repo. Do not edit `apex-workflow` when only one app's authority chain changed.
 
 ## 4. Skill Placement
 
@@ -201,8 +190,7 @@ The installer symlinks:
 
 into the Codex skills directory used by the machine.
 
-Pass `--skip-skill-link` only when another install mechanism already handles
-the skill.
+Pass `--skip-skill-link` only when another install mechanism already handles the skill.
 
 ## 5. Minimum Useful Adoption
 
@@ -215,5 +203,4 @@ The smallest good adoption has:
 - one browser or explicit browser-skip policy
 - one manifest location
 
-Do not add GitNexus, Linear, browser automation, or design handoff gates unless
-the target app actually has them.
+Do not add GitNexus, Linear, browser automation, or design handoff gates unless the target app actually has them.

@@ -189,7 +189,17 @@ const SECRET_PATTERNS = [
   /\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi,
 ];
 const TAIL_LIMIT = 4000;
-const FINGERPRINT_IGNORE_DIRS = new Set([".git", "node_modules", ".next", "dist", "build", "coverage", "tmp", ".turbo", ".cache"]);
+const FINGERPRINT_IGNORE_DIRS = new Set([
+  ".git",
+  "node_modules",
+  ".next",
+  "dist",
+  "build",
+  "coverage",
+  "tmp",
+  ".turbo",
+  ".cache",
+]);
 const FINGERPRINT_MAX_FILE_BYTES = 1024 * 1024;
 
 function defaultDirtyPolicy(mode) {
@@ -234,12 +244,15 @@ function makeFreshnessTemplate() {
 function makeTemplate(args, config) {
   const mode = String(args.mode ?? "route-local");
   if (!getMode(config, mode)) {
-    throw new Error(`invalid mode "${mode}". Expected one of: ${(config.modes ?? []).map((entry) => entry.id).join(", ")}`);
+    throw new Error(
+      `invalid mode "${mode}". Expected one of: ${(config.modes ?? []).map((entry) => entry.id).join(", ")}`,
+    );
   }
 
   const issue = String(args.issue ?? "none");
-  const trackerDisposition =
-    String(args.tracker ?? args["tracker-disposition"] ?? (issue !== "none" ? "existing" : "none"));
+  const trackerDisposition = String(
+    args.tracker ?? args["tracker-disposition"] ?? (issue !== "none" ? "existing" : "none"),
+  );
 
   const dirtyPolicy = normalizeDirtyPolicy(args["dirty-policy"], mode);
   const browserDisposition = args.browser ?? defaultBrowserDisposition(config);
@@ -268,8 +281,18 @@ function makeTemplate(args, config) {
       freshness: makeFreshnessTemplate(),
     },
     checks: {
-      required: requiredChecks.length > 0 ? requiredChecks : codeFacing ? normalizeStringArray(config.verification?.requiredCommands) : [],
-      optional: optionalChecks.length > 0 ? optionalChecks : codeFacing ? normalizeStringArray(config.verification?.optionalCommands) : [],
+      required:
+        requiredChecks.length > 0
+          ? requiredChecks
+          : codeFacing
+            ? normalizeStringArray(config.verification?.requiredCommands)
+            : [],
+      optional:
+        optionalChecks.length > 0
+          ? optionalChecks
+          : codeFacing
+            ? normalizeStringArray(config.verification?.optionalCommands)
+            : [],
       browser: String(browserDisposition),
       typecheck: String(typecheckDisposition),
       runs: [],
@@ -280,7 +303,13 @@ function makeTemplate(args, config) {
       disposition: trackerDisposition,
       id: issue !== "none" ? issue : null,
     },
-    downshiftProof: String(args.downshift ?? args["downshift-proof"] ?? (mode === "reconciliation" ? "reconciliation: no code implementation in this slice" : "TODO: why this is the lightest safe mode")),
+    downshiftProof: String(
+      args.downshift ??
+        args["downshift-proof"] ??
+        (mode === "reconciliation"
+          ? "reconciliation: no code implementation in this slice"
+          : "TODO: why this is the lightest safe mode"),
+    ),
     knownFailures: [],
     notes: "",
   };
@@ -293,7 +322,7 @@ function validateManifest(manifest, config) {
 
   if (manifest.version !== 1) failures.push("version must be 1");
   if (manifest.app && manifest.app !== config.name) failures.push(`app must match config.name (${config.name})`);
-  if (!manifest.issue) failures.push("issue is required; use \"none\" intentionally");
+  if (!manifest.issue) failures.push('issue is required; use "none" intentionally');
   if (!mode) failures.push(`mode must be one of: ${(config.modes ?? []).map((entry) => entry.id).join(", ")}`);
   if (!manifest.surface || String(manifest.surface).startsWith("TODO")) failures.push("surface must name the owner");
   if (!Array.isArray(manifest.contracts)) failures.push("contracts must be an array");
@@ -371,10 +400,10 @@ function validateRenderedCommand(command) {
   if (unresolved) throw new Error(`command contains unresolved placeholder(s): ${unresolved.join(", ")}`);
 }
 
-function runDetectCommand(manifest, manifestPath, command, changedFilesFile, config, args = {}) {
+async function runDetectCommand(manifest, manifestPath, command, changedFilesFile, config, args = {}) {
   const rendered = command.replaceAll("{changedFilesFile}", changedFilesFile);
   validateRenderedCommand(rendered);
-  const status = runAndRecord(manifest, manifestPath, rendered, {
+  const status = await runAndRecord(manifest, manifestPath, rendered, {
     ...args,
     configObject: config,
     commandSource: "detect-command",
@@ -466,7 +495,9 @@ function fingerprintPath(filePath) {
   }
   if (!stats.isFile()) return [`other:${filePath}`];
   if (stats.size > FINGERPRINT_MAX_FILE_BYTES) {
-    throw new Error(`freshness input exceeds limit: ${filePath}; configure a narrower verification.freshnessInputs entry`);
+    throw new Error(
+      `freshness input exceeds limit: ${filePath}; configure a narrower verification.freshnessInputs entry`,
+    );
   }
   return [`file:${filePath}:${sha256(readFileSync(absolute))}`];
 }
@@ -594,7 +625,7 @@ function updateDetectResult(manifest, detectResult) {
   };
 }
 
-function runDetect(args, config, options = {}) {
+async function runDetect(args, config, options = {}) {
   const filePath = manifestPathFromArgs(args, config);
   const manifest = readManifest(filePath);
   const failures = validateManifest(manifest, config);
@@ -629,7 +660,7 @@ function runDetect(args, config, options = {}) {
     return { ok: true, status: 0, manifest, filePath, failures: [] };
   }
 
-  const detectStatus = runDetectCommand(manifest, filePath, detectCommand, outputPath, config, args);
+  const detectStatus = await runDetectCommand(manifest, filePath, detectCommand, outputPath, config, args);
   if (detectStatus === 0) rmSync(outputPath, { force: true });
   writeManifest(filePath, manifest);
   return {
@@ -641,8 +672,8 @@ function runDetect(args, config, options = {}) {
   };
 }
 
-function commandDetect(args, config) {
-  const result = runDetect(args, config, { write: Boolean(args.write) });
+async function commandDetect(args, config) {
+  const result = await runDetect(args, config, { write: Boolean(args.write) });
   if (!result.ok) process.exit(result.status);
 }
 
@@ -655,7 +686,9 @@ function commandSummary(args, config) {
   console.log(`Dirty policy: ${dirtyPolicyFor(manifest, args)}`);
   console.log(`Owned files: ${(manifest.ownedFiles ?? []).length}`);
   console.log(`Contracts: ${(manifest.contracts ?? []).join(", ") || "none listed"}`);
-  console.log(`Tracker: ${manifest.tracker?.provider ?? "missing"} / ${manifest.tracker?.disposition ?? "missing"}${manifest.tracker?.id ? ` (${manifest.tracker.id})` : ""}`);
+  console.log(
+    `Tracker: ${manifest.tracker?.provider ?? "missing"} / ${manifest.tracker?.disposition ?? "missing"}${manifest.tracker?.id ? ` (${manifest.tracker.id})` : ""}`,
+  );
   console.log(`Code intelligence: ${manifest.codeIntelligence?.provider ?? "missing"}`);
   console.log(`Downshift proof: ${manifest.downshiftProof ?? "missing"}`);
   console.log(`Browser: ${manifest.checks?.browser ?? "missing"}`);
@@ -677,10 +710,14 @@ function codeIntelligenceScope(manifest) {
   const impacts = manifest.codeIntelligence?.impacts ?? [];
   const impactText =
     impacts.length > 0
-      ? impacts.map((impact) => `${impact.target} (${impact.risk}${impact.notes ? `: ${impact.notes}` : ""})`).join("; ")
+      ? impacts
+          .map((impact) => `${impact.target} (${impact.risk}${impact.notes ? `: ${impact.notes}` : ""})`)
+          .join("; ")
       : "none recorded";
   const detect = manifest.codeIntelligence?.detect ? JSON.stringify(manifest.codeIntelligence.detect) : "not recorded";
-  const freshness = manifest.codeIntelligence?.freshness ? JSON.stringify(manifest.codeIntelligence.freshness) : "not recorded";
+  const freshness = manifest.codeIntelligence?.freshness
+    ? JSON.stringify(manifest.codeIntelligence.freshness)
+    : "not recorded";
   return `${manifest.codeIntelligence?.provider ?? "missing"}; impacts: ${impactText}; freshness: ${freshness}; detect: ${detect}`;
 }
 
@@ -707,7 +744,12 @@ function evidenceRecords(manifest) {
 function formatEvidence(manifest) {
   const records = evidenceRecords(manifest);
   if (records.length === 0) return formatList(["none"]);
-  return formatList(records.map((record) => `${record.kind}: ${record.summary}${record.source ? ` (${record.source})` : ""}${record.note ? ` - ${record.note}` : ""}`));
+  return formatList(
+    records.map(
+      (record) =>
+        `${record.kind}: ${record.summary}${record.source ? ` (${record.source})` : ""}${record.note ? ` - ${record.note}` : ""}`,
+    ),
+  );
 }
 
 function formatGitNexusFreshness(manifest, config) {
@@ -715,10 +757,18 @@ function formatGitNexusFreshness(manifest, config) {
   if (!needsGitNexusFreshnessGate(manifest, config)) return formatList(["not required for this mode"]);
   const freshness = manifest.codeIntelligence?.freshness ?? {};
   const entries = [];
-  entries.push(`preSliceStatus: ${freshness.preSliceStatus ? `${freshness.preSliceStatus.status}${freshness.preSliceStatus.note ? ` (${freshness.preSliceStatus.note})` : ""}` : "not recorded"}`);
-  entries.push(`preSliceRefresh: ${freshness.preSliceRefresh ? `${freshness.preSliceRefresh.status}${freshness.preSliceRefresh.note ? ` (${freshness.preSliceRefresh.note})` : ""}` : "not recorded"}`);
-  entries.push(`postSliceRefresh: ${freshness.postSliceRefresh ? `${freshness.postSliceRefresh.status}${freshness.postSliceRefresh.note ? ` (${freshness.postSliceRefresh.note})` : ""}` : "not recorded"}`);
-  entries.push(`postSliceSkipReason: ${freshness.postSliceSkipReason ? freshness.postSliceSkipReason.reason : "not recorded"}`);
+  entries.push(
+    `preSliceStatus: ${freshness.preSliceStatus ? `${freshness.preSliceStatus.status}${freshness.preSliceStatus.note ? ` (${freshness.preSliceStatus.note})` : ""}` : "not recorded"}`,
+  );
+  entries.push(
+    `preSliceRefresh: ${freshness.preSliceRefresh ? `${freshness.preSliceRefresh.status}${freshness.preSliceRefresh.note ? ` (${freshness.preSliceRefresh.note})` : ""}` : "not recorded"}`,
+  );
+  entries.push(
+    `postSliceRefresh: ${freshness.postSliceRefresh ? `${freshness.postSliceRefresh.status}${freshness.postSliceRefresh.note ? ` (${freshness.postSliceRefresh.note})` : ""}` : "not recorded"}`,
+  );
+  entries.push(
+    `postSliceSkipReason: ${freshness.postSliceSkipReason ? freshness.postSliceSkipReason.reason : "not recorded"}`,
+  );
   return formatList(entries);
 }
 
@@ -736,17 +786,29 @@ function finishValue(label, manifest, config, args) {
     const skipped = normalizeStringArray(args.skipped).map((entry) => `skipped: ${entry}`);
     const known = normalizeStringArray(manifest.knownFailures).map((entry) => `known: ${entry}`);
     const recorded = failedSkippedFromRuns(manifest);
-    return formatList([...failed, ...skipped, ...known, ...recorded].length > 0 ? [...failed, ...skipped, ...known, ...recorded] : ["none"]);
+    return formatList(
+      [...failed, ...skipped, ...known, ...recorded].length > 0
+        ? [...failed, ...skipped, ...known, ...recorded]
+        : ["none"],
+    );
   }
   if (normalized === "known failures / not verified") {
     const skipped = normalizeStringArray(args.skipped);
-    return formatList([...skipped, ...(manifest.knownFailures ?? [])].length > 0 ? [...skipped, ...(manifest.knownFailures ?? [])] : ["none"]);
+    return formatList(
+      [...skipped, ...(manifest.knownFailures ?? [])].length > 0
+        ? [...skipped, ...(manifest.knownFailures ?? [])]
+        : ["none"],
+    );
   }
   if (normalized === "manual evidence" || normalized === "evidence") return formatEvidence(manifest);
   if (normalized === "gitnexus freshness") return formatGitNexusFreshness(manifest, config);
-  if (normalized === "code-intelligence scope" || normalized === "gitnexus scope") return codeIntelligenceScope(manifest);
+  if (normalized === "code-intelligence scope" || normalized === "gitnexus scope")
+    return codeIntelligenceScope(manifest);
   if (normalized === "tracker update" || normalized === "linear update") {
-    return args["tracker-update"] ?? `${manifest.tracker?.provider ?? config.tracker?.provider ?? "missing"} / ${manifest.tracker?.disposition ?? "missing"}${manifest.tracker?.id ? ` (${manifest.tracker.id})` : ""}`;
+    return (
+      args["tracker-update"] ??
+      `${manifest.tracker?.provider ?? config.tracker?.provider ?? "missing"} / ${manifest.tracker?.disposition ?? "missing"}${manifest.tracker?.id ? ` (${manifest.tracker.id})` : ""}`
+    );
   }
   if (normalized === "next safe slice") return args.next ?? "not specified";
   return args[label] ?? "not recorded";
@@ -767,24 +829,34 @@ function commandFinish(args, config) {
     process.exit(1);
   }
 
-  const labels = config.manifest?.finishPacket?.length > 0 ? config.manifest.finishPacket : [
-    "What landed",
-    "Mode",
-    "Downshift proof",
-    "Owned files",
-    "No-touch preserved",
-    "Verified commands",
-    "Failed / skipped checks",
-    "Manual evidence",
-    "GitNexus freshness",
-    "Code-intelligence scope",
-    "Tracker update",
-    "Next safe slice",
-  ];
-  const output = [`# Finish Packet`, "", ...labels.flatMap((label) => [`## ${label}`, finishValue(label, manifest, config, args), ""])].join("\n");
+  const labels =
+    config.manifest?.finishPacket?.length > 0
+      ? config.manifest.finishPacket
+      : [
+          "What landed",
+          "Mode",
+          "Downshift proof",
+          "Owned files",
+          "No-touch preserved",
+          "Verified commands",
+          "Failed / skipped checks",
+          "Manual evidence",
+          "GitNexus freshness",
+          "Code-intelligence scope",
+          "Tracker update",
+          "Next safe slice",
+        ];
+  const output = [
+    `# Finish Packet`,
+    "",
+    ...labels.flatMap((label) => [`## ${label}`, finishValue(label, manifest, config, args), ""]),
+  ].join("\n");
 
   if (args.out) {
-    const outPath = resolveInsideRoot(process.cwd(), String(args.out), { label: "finish packet output", file: true }).absolute;
+    const outPath = resolveInsideRoot(process.cwd(), String(args.out), {
+      label: "finish packet output",
+      file: true,
+    }).absolute;
     mkdirSync(dirname(outPath), { recursive: true });
     writeFileSync(outPath, output.endsWith("\n") ? output : `${output}\n`);
     console.log(`[apex-manifest] wrote ${repoPath(outPath)}`);
@@ -799,7 +871,17 @@ function ensureRuns(manifest) {
   if (!Array.isArray(manifest.checks.runs)) manifest.checks.runs = [];
 }
 
-function makeRunRecord(manifest, manifestPath, command, status, exitCode, startedAt, finishedAt, durationMs, options = {}) {
+function makeRunRecord(
+  manifest,
+  manifestPath,
+  command,
+  status,
+  exitCode,
+  startedAt,
+  finishedAt,
+  durationMs,
+  options = {},
+) {
   const commandSource = String(options.commandSource ?? "manual-record-check");
   if (!RUN_SOURCES.has(commandSource)) {
     throw new Error(`commandSource must be one of: ${[...RUN_SOURCES].join(", ")}`);
@@ -933,7 +1015,11 @@ function commandRecordGitNexusFreshness(args, config) {
 }
 
 function needsGitNexusFreshnessGate(manifest, config) {
-  return GITNEXUS_PROVIDERS.has(manifest.codeIntelligence?.provider) && isCodeFacingMode(config, manifest.mode) && manifest.mode !== "tiny";
+  return (
+    GITNEXUS_PROVIDERS.has(manifest.codeIntelligence?.provider) &&
+    isCodeFacingMode(config, manifest.mode) &&
+    manifest.mode !== "tiny"
+  );
 }
 
 function validateGitNexusFreshnessForClose(manifest, config) {
@@ -950,10 +1036,11 @@ function validateGitNexusFreshnessForClose(manifest, config) {
     failures.push("GitNexus freshness preSliceStatus is required for GitNexus-enabled non-tiny code slices");
   }
 
-  const staleOrRequired =
-    preStatus && (["stale", "missing"].includes(preStatus.status) || preStatus.refreshRequired);
+  const staleOrRequired = preStatus && (["stale", "missing"].includes(preStatus.status) || preStatus.refreshRequired);
   if (staleOrRequired && !preRefresh) {
-    failures.push("GitNexus freshness preSliceRefresh is required when preSliceStatus is stale, missing, or refreshRequired");
+    failures.push(
+      "GitNexus freshness preSliceRefresh is required when preSliceStatus is stale, missing, or refreshRequired",
+    );
   }
   if (staleOrRequired && preRefresh && preRefresh.status !== "refreshed") {
     failures.push("GitNexus freshness preSliceRefresh must have status=refreshed when refresh is required");
@@ -966,7 +1053,9 @@ function validateGitNexusFreshnessForClose(manifest, config) {
     failures.push("GitNexus freshness requires postSliceRefresh or postSliceSkipReason before close");
   }
   if (postSkip?.graphRelevant) {
-    failures.push("GitNexus freshness postSliceRefresh is required when graphRelevant=true; postSliceSkipReason cannot close the gate");
+    failures.push(
+      "GitNexus freshness postSliceRefresh is required when graphRelevant=true; postSliceSkipReason cannot close the gate",
+    );
   }
 
   return failures;
@@ -1013,32 +1102,42 @@ function validateRequiredEvidenceFreshness(manifest, config, args = {}) {
   return failures;
 }
 
-function runAndRecord(manifest, manifestPath, command, args = {}) {
+async function runAndRecord(manifest, manifestPath, command, args = {}) {
   validateRenderedCommand(command);
   const runId = nextRunId(manifest);
   const logPath = logPathForRun(manifestPath, runId);
-  const result = runTrustedCommand(command, {
+  const result = await runTrustedCommand(command, {
     cwd: process.cwd(),
     commandSource: args.commandSource ?? "manual-run-check",
     timeoutMs: args["timeout-ms"] ?? args.timeoutMs,
     logPath,
   });
   const status = result.status === 0 ? "passed" : "failed";
-  const record = makeRunRecord(manifest, manifestPath, result.command, status, result.status, result.startedAt, result.finishedAt, result.durationMs, {
-    id: runId,
-    commandSource: args.commandSource ?? "manual-run-check",
-    stdout: result.stdout,
-    stderr: result.stderr,
-    logPath,
-    logSha256: result.logSha256,
-    timeoutMs: result.timeoutMs,
-    timedOut: result.timedOut,
-    signal: result.signal,
-    outputTruncated: result.outputTruncated,
-    config: args.configObject,
-    configPath: args.config ?? "apex.workflow.json",
-    note: args.note ?? "",
-  });
+  const record = makeRunRecord(
+    manifest,
+    manifestPath,
+    result.command,
+    status,
+    result.status,
+    result.startedAt,
+    result.finishedAt,
+    result.durationMs,
+    {
+      id: runId,
+      commandSource: args.commandSource ?? "manual-run-check",
+      stdout: result.stdout,
+      stderr: result.stderr,
+      logPath,
+      logSha256: result.logSha256,
+      timeoutMs: result.timeoutMs,
+      timedOut: result.timedOut,
+      signal: result.signal,
+      outputTruncated: result.outputTruncated,
+      config: args.configObject,
+      configPath: args.config ?? "apex.workflow.json",
+      note: args.note ?? "",
+    },
+  );
   record.logSha256 = result.logSha256;
   appendRun(manifest, record);
   console.log(`[apex-manifest] ${status}: ${result.command} (${logPath})`);
@@ -1104,12 +1203,16 @@ function commandPreviewClose(manifest, config, args = {}) {
   }
 }
 
-function commandRunCheck(args, config) {
+async function commandRunCheck(args, config) {
   const filePath = manifestPathFromArgs(args, config);
   const manifest = readManifest(filePath);
   const command = args.cmd ?? args.command;
   if (!command) throw new Error("--cmd is required");
-  const status = runAndRecord(manifest, filePath, String(command), { ...args, configObject: config, commandSource: "manual-run-check" });
+  const status = await runAndRecord(manifest, filePath, String(command), {
+    ...args,
+    configObject: config,
+    commandSource: "manual-run-check",
+  });
   writeManifest(filePath, manifest);
   process.exit(status);
 }
@@ -1137,7 +1240,7 @@ function commandRecordCheck(args, config) {
   console.log(`[apex-manifest] recorded ${status}: ${command}`);
 }
 
-function commandClose(args, config) {
+async function commandClose(args, config) {
   const filePath = manifestPathFromArgs(args, config);
   let manifest = readManifest(filePath);
   const failures = validateManifest(manifest, config);
@@ -1157,7 +1260,7 @@ function commandClose(args, config) {
     return;
   }
 
-  const detectResult = runDetect({ ...args, file: filePath, write: true, strict: true }, config, { write: true });
+  const detectResult = await runDetect({ ...args, file: filePath, write: true, strict: true }, config, { write: true });
   if (!detectResult.ok) process.exit(detectResult.status);
   manifest = readManifest(filePath);
   const dirtyPolicy = dirtyPolicyFor(manifest, args);
@@ -1165,7 +1268,11 @@ function commandClose(args, config) {
 
   if (!args["skip-required"]) {
     for (const command of manifest.checks?.required ?? []) {
-      const status = runAndRecord(manifest, filePath, command, { ...args, configObject: config, commandSource: "close-required" });
+      const status = await runAndRecord(manifest, filePath, command, {
+        ...args,
+        configObject: config,
+        commandSource: "close-required",
+      });
       writeManifest(filePath, manifest);
       if (status !== 0) hadFailure = true;
       if (status !== 0 && !args["keep-going"]) process.exit(status);
@@ -1185,7 +1292,11 @@ function commandClose(args, config) {
 
   const diffCommand = dirtyPolicy === "owned-files-only" ? ownedDiffCheckCommand(manifest) : "git diff --check";
   if (diffCommand) {
-    const diffStatus = runAndRecord(manifest, filePath, diffCommand, { ...args, configObject: config, commandSource: "close-diff" });
+    const diffStatus = await runAndRecord(manifest, filePath, diffCommand, {
+      ...args,
+      configObject: config,
+      commandSource: "close-diff",
+    });
     writeManifest(filePath, manifest);
     if (diffStatus !== 0) hadFailure = true;
     if (diffStatus !== 0 && !args["keep-going"]) process.exit(diffStatus);
@@ -1216,7 +1327,7 @@ function commandClose(args, config) {
   if (hadFailure) process.exit(1);
 }
 
-try {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const needsConfig = !["files"].includes(args._command);
   const config = needsConfig ? loadConfig(args) : null;
@@ -1232,10 +1343,10 @@ try {
       commandFiles(args);
       break;
     case "detect":
-      commandDetect(args, config);
+      await commandDetect(args, config);
       break;
     case "run-check":
-      commandRunCheck(args, config);
+      await commandRunCheck(args, config);
       break;
     case "record-check":
       commandRecordCheck(args, config);
@@ -1247,7 +1358,7 @@ try {
       commandRecordGitNexusFreshness(args, config);
       break;
     case "close":
-      commandClose(args, config);
+      await commandClose(args, config);
       break;
     case "summary":
       commandSummary(args, config);
@@ -1258,6 +1369,10 @@ try {
     default:
       usage(1);
   }
+}
+
+try {
+  await main();
 } catch (error) {
   console.error(`[apex-manifest] ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);

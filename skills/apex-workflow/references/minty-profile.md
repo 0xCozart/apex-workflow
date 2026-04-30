@@ -18,8 +18,7 @@ Minty is the first extracted Apex Workflow profile.
 
 ## Design Rule
 
-For Minty, browser evidence is functional-only. Visible UI changes still need a
-human visual audit checklist.
+For Minty, browser evidence is functional-only. Visible UI changes still need a human visual audit checklist.
 
 ## Skill Mapping
 
@@ -28,4 +27,3 @@ human visual audit checklist.
 - `minty-linear-chief` -> tracker adapter
 - `minty-product-ops` -> product authority and planning behavior
 - `agent-browser` Minty notes -> browser policy
-

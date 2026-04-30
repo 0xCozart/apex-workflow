@@ -42,18 +42,7 @@ const forbiddenPatterns = [
   },
 ];
 
-const TEXT_EXTENSIONS = new Set([
-  "",
-  ".cjs",
-  ".js",
-  ".json",
-  ".md",
-  ".mjs",
-  ".ts",
-  ".txt",
-  ".yaml",
-  ".yml",
-]);
+const TEXT_EXTENSIONS = new Set(["", ".cjs", ".js", ".json", ".md", ".mjs", ".ts", ".txt", ".yaml", ".yml"]);
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

@@ -1,7 +1,6 @@
 # Tracker Adapters
 
-Tracker state reflects execution. It does not define product truth unless the
-profile explicitly says so.
+Tracker state reflects execution. It does not define product truth unless the profile explicitly says so.
 
 ## Record Work When
 
@@ -41,6 +40,5 @@ When `tracker.provider` is `file`:
 
 ## None
 
-When `tracker.provider` is `none`, record `tracker.disposition = none` in the
-manifest and explain why durable tracking is not needed.
-
+When `tracker.provider` is `none`, record `tracker.disposition = none` in the manifest and explain why durable tracking
+is not needed.

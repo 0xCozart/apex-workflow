@@ -7,7 +7,8 @@ Apex Workflow is configured by `apex.workflow.json`.
 - `version`: currently `1`
 - `name`: app or repo name
 - `authority`: product, execution, and workflow source lists
-- `operatorCautions`: human-readable cautions that are not path authority, such as secret-handling or public/private repo boundaries
+- `operatorCautions`: human-readable cautions that are not path authority, such as secret-handling or public/private
+  repo boundaries
 - `orientation`: docs to read before broad search
 - `modes`: allowed workflow modes
 - `tracker`: tracker adapter and recording policy
@@ -62,9 +63,8 @@ apex-init \
   --yes
 ```
 
-The installer writes `apex.workflow.json`, updates `AGENTS.md`, validates the
-profile, prints an install report, and links the local skill unless
-`--skip-skill-link` is passed.
+The installer writes `apex.workflow.json`, updates `AGENTS.md`, validates the profile, prints an install report, and
+links the local skill unless `--skip-skill-link` is passed.
 
 If no broad-search orientation doc exists, create a draft codebase map:
 
@@ -72,8 +72,7 @@ If no broad-search orientation doc exists, create a draft codebase map:
 apex-map-codebase --target=/path/to/app --write
 ```
 
-The installer can create the draft during setup with
-`--create-codebase-map`. Draft maps are not authority. Review
+The installer can create the draft during setup with `--create-codebase-map`. Draft maps are not authority. Review
 `docs/CODEBASE_MAP.md`, remove every `REVIEW NEEDED` marker, then run:
 
 ```bash
@@ -81,37 +80,40 @@ apex-map-codebase --target=/path/to/app --mark-reviewed --sync-profile
 apex-map-codebase --target=/path/to/app --check --require-reviewed
 ```
 
-`--sync-profile` removes only the generated draft-map review item from
-`setup.reviewNeeded`; it preserves unrelated setup concerns.
+`--sync-profile` removes only the generated draft-map review item from `setup.reviewNeeded`; it preserves unrelated
+setup concerns.
 
 The install report includes:
 
 - inferred authority and orientation paths with `confirmed`, `guessed`, or `generated` confidence
 - tracker, code-intelligence, and browser choices
-- code-intelligence availability split into configured preference, detected repo support, current host availability, and fallback command readiness
+- code-intelligence availability split into configured preference, detected repo support, current host availability, and
+  fallback command readiness
 - target repo dirty state
 - review items to resolve before the first implementation slice
 - baseline checkpoint guidance when setup files are uncommitted
 
-Use `--operator-cautions="Do not copy secrets, Keep public docs separate"` for
-textual cautions. Do not put prose cautions in `authority.doNotUseAsAuthority`;
-that field is path-like and the validator treats it as profile path data.
+Use `--operator-cautions="Do not copy secrets, Keep public docs separate"` for textual cautions. Do not put prose
+cautions in `authority.doNotUseAsAuthority`; that field is path-like and the validator treats it as profile path data.
 
 ## Profile Rules
 
 - Keep app-specific names in the profile, not in `SKILL.md`.
 - Prefer arrays of docs over prose paragraphs.
 - Commands may include placeholders such as `{symbol}`, `{query}`, `{file}`, and `{changedFilesFile}`.
-- `codeIntelligence.detectCommand` should accept a changed-files file placeholder when the provider supports scoped analysis.
-- `codeIntelligence.availability` records install-time readiness and host-session proof separately. Do not treat `provider = "gitnexus-mcp"` as proof that MCP tools are visible to the current agent.
+- `codeIntelligence.detectCommand` should accept a changed-files file placeholder when the provider supports scoped
+  analysis.
+- `codeIntelligence.availability` records install-time readiness and host-session proof separately. Do not treat
+  `provider = "gitnexus-mcp"` as proof that MCP tools are visible to the current agent.
 - If a target app has no tracker, set `tracker.provider` to `none` and require explicit skip reasons in manifests.
-- Review `setup.inferredPaths` before the first slice. Anything marked `guessed` is a candidate, not confirmed authority.
-- Required path validation is exact-case. Fix `docs/ARCHITECTURE.md` to `docs/architecture.md` when that is the real file.
+- Review `setup.inferredPaths` before the first slice. Anything marked `guessed` is a candidate, not confirmed
+  authority.
+- Required path validation is exact-case. Fix `docs/ARCHITECTURE.md` to `docs/architecture.md` when that is the real
+  file.
 
 ## Doctor
 
-Use the doctor to answer whether the target repo is ready for its first
-implementation slice:
+Use the doctor to answer whether the target repo is ready for its first implementation slice:
 
 ```bash
 apex-doctor \
@@ -119,17 +121,15 @@ apex-doctor \
   --config=apex.workflow.json
 ```
 
-It checks unresolved installer review items, guessed inferred paths,
-`tmp/apex-workflow/` ignore coverage, the managed `AGENTS.md` block, configured
-adapter readiness, codebase-map readiness when configured, the skill symlink,
-and whether setup files have a clean git baseline.
+It checks unresolved installer review items, guessed inferred paths, `tmp/apex-workflow/` ignore coverage, the managed
+`AGENTS.md` block, configured adapter readiness, codebase-map readiness when configured, the skill symlink, and whether
+setup files have a clean git baseline.
 
 ## Manifest Evidence
 
-`manifest.defaultDir` should match the artifact's intended durability. Use a
-committed docs/proof directory for reviewer evidence, or keep `tmp/apex-workflow`
-only when the target repo intentionally treats selected tmp manifests as
-durable artifacts.
+`manifest.defaultDir` should match the artifact's intended durability. Use a committed docs/proof directory for reviewer
+evidence, or keep `tmp/apex-workflow` only when the target repo intentionally treats selected tmp manifests as durable
+artifacts.
 
 Use `apex-manifest run-check` to record command results into the manifest:
 
@@ -151,11 +151,10 @@ apex-manifest \
   --next=none
 ```
 
-`close` runs detect, required manifest checks, `git diff --check`, records the
-results in `checks.runs`, and prints a finish packet from recorded evidence.
-With `dirtyPolicy=owned-files-only`, `close` scopes `git diff --check` to
-`ownedFiles`; if no owned files are listed, it records a skipped diff-check
-entry instead of checking unrelated dirty work.
+`close` runs detect, required manifest checks, `git diff --check`, records the results in `checks.runs`, and prints a
+finish packet from recorded evidence. With `dirtyPolicy=owned-files-only`, `close` scopes `git diff --check` to
+`ownedFiles`; if no owned files are listed, it records a skipped diff-check entry instead of checking unrelated dirty
+work.
 
 Record terminal, TUI, or operator evidence separately from automated commands:
 
@@ -180,6 +179,5 @@ apex-manifest \
   --command="npm run gitnexus:status"
 ```
 
-`close` and standalone `finish` enforce this for GitNexus-enabled non-tiny
-code slices. They require pre-slice status evidence and either post-slice
-refresh evidence or a recorded skip reason.
+`close` and standalone `finish` enforce this for GitNexus-enabled non-tiny code slices. They require pre-slice status
+evidence and either post-slice refresh evidence or a recorded skip reason.

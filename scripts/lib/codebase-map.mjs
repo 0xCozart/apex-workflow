@@ -77,7 +77,9 @@ export function evaluateCodebaseMap(text, options = {}) {
   }
 
   if (!markerBalance.balanced) {
-    errors.push(`generated section markers are unbalanced: ${markerBalance.startCount} start, ${markerBalance.endCount} end`);
+    errors.push(
+      `generated section markers are unbalanced: ${markerBalance.startCount} start, ${markerBalance.endCount} end`,
+    );
   }
 
   if (status === "legacy") {
