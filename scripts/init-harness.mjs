@@ -20,10 +20,7 @@ import { tmpdir } from "node:os";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
-import {
-  DEFAULT_CODEBASE_MAP_PATH,
-  GENERATED_MAP_DRAFT_REVIEW_ITEM,
-} from "./lib/codebase-map.mjs";
+import { DEFAULT_CODEBASE_MAP_PATH, GENERATED_MAP_DRAFT_REVIEW_ITEM } from "./lib/codebase-map.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const APEX_ROOT = resolve(SCRIPT_DIR, "..");
@@ -102,7 +99,9 @@ function splitCsv(value) {
 }
 
 function resolveExistingRelativePath(targetRoot, candidate) {
-  const parts = String(candidate).split(/[\\/]+/).filter(Boolean);
+  const parts = String(candidate)
+    .split(/[\\/]+/)
+    .filter(Boolean);
   let current = targetRoot;
   const actualParts = [];
 
@@ -126,13 +125,7 @@ function resolveExistingRelativePath(targetRoot, candidate) {
 }
 
 function existingRelativePaths(targetRoot, candidates) {
-  return [
-    ...new Set(
-      candidates
-        .map((entry) => resolveExistingRelativePath(targetRoot, entry))
-        .filter(Boolean),
-    ),
-  ];
+  return [...new Set(candidates.map((entry) => resolveExistingRelativePath(targetRoot, entry)).filter(Boolean))];
 }
 
 function existingRelativePathRecords(targetRoot, candidates, reason) {
@@ -226,7 +219,9 @@ function chooseAuthorityDocRecords(candidates, limit = 3) {
 }
 
 function inferName(targetRoot, pkg, args) {
-  return String(args.name ?? pkg?.name ?? basename(targetRoot)).replace(/^@/, "").replace(/\//g, "-");
+  return String(args.name ?? pkg?.name ?? basename(targetRoot))
+    .replace(/^@/, "")
+    .replace(/\//g, "-");
 }
 
 function inferAuthority(targetRoot) {
@@ -244,9 +239,11 @@ function inferAuthority(targetRoot) {
       ],
       "canonical product authority filename",
     ),
-    ...discoveredPathRecords(targetRoot, (filePath) =>
-      (filePath.includes("prd") || filePath.includes("product-requirements") || filePath.endsWith("/product.md")) &&
-      !filePath.includes("thesis"),
+    ...discoveredPathRecords(
+      targetRoot,
+      (filePath) =>
+        (filePath.includes("prd") || filePath.includes("product-requirements") || filePath.endsWith("/product.md")) &&
+        !filePath.includes("thesis"),
       "matched product/prd filename pattern",
     ),
   ];
@@ -355,12 +352,14 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
       hasAnyPackageScript(pkg, ["gitnexus", "gitnexus:status", "gitnexus:ensure-fresh"]) ||
       existsSync(join(targetRoot, "scripts/run-gitnexus-local.mjs")),
     statusCommand: hasPackageScript(pkg, "gitnexus:status") ? "npm run gitnexus:status" : "npx gitnexus status",
-    refreshCommand: hasPackageScript(pkg, "gitnexus:ensure-fresh") ? "npm run gitnexus:ensure-fresh" : "npx gitnexus analyze",
-    queryCommand: hasPackageScript(pkg, "gitnexus") ? "npm run gitnexus -- query \"{query}\"" : null,
-    contextCommand: hasPackageScript(pkg, "gitnexus") ? "npm run gitnexus -- context \"{symbol}\"" : null,
-    impactCommand: hasPackageScript(pkg, "gitnexus") ? "npm run gitnexus -- impact \"{symbol}\"" : null,
+    refreshCommand: hasPackageScript(pkg, "gitnexus:ensure-fresh")
+      ? "npm run gitnexus:ensure-fresh"
+      : "npx gitnexus analyze",
+    queryCommand: hasPackageScript(pkg, "gitnexus") ? 'npm run gitnexus -- query "{query}"' : null,
+    contextCommand: hasPackageScript(pkg, "gitnexus") ? 'npm run gitnexus -- context "{symbol}"' : null,
+    impactCommand: hasPackageScript(pkg, "gitnexus") ? 'npm run gitnexus -- impact "{symbol}"' : null,
     detectCommand: existsSync(join(targetRoot, "scripts/run-gitnexus-local.mjs"))
-      ? "node scripts/run-gitnexus-local.mjs detect_changes --changed-files-file \"{changedFilesFile}\""
+      ? 'node scripts/run-gitnexus-local.mjs detect_changes --changed-files-file "{changedFilesFile}"'
       : null,
     setup:
       "If GitNexus MCP fails in this environment, add repo-local wrapper scripts around npx gitnexus or a custom wrapper and point these commands at that wrapper.",
@@ -402,9 +401,14 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
       },
       mcp: {
         preferred: false,
-        install: "Install GitNexus as MCP when possible, but this profile is pinned to the wrapper because the target repo requested it.",
+        install:
+          "Install GitNexus as MCP when possible, but this profile is pinned to the wrapper because the target repo requested it.",
         tools: ["gitnexus_query", "gitnexus_context", "gitnexus_impact", "gitnexus_detect_changes", "gitnexus_rename"],
-        resources: ["gitnexus://repo/{name}/context", "gitnexus://repo/{name}/clusters", "gitnexus://repo/{name}/processes"],
+        resources: [
+          "gitnexus://repo/{name}/context",
+          "gitnexus://repo/{name}/clusters",
+          "gitnexus://repo/{name}/processes",
+        ],
       },
       wrapperFallback,
       statusCommand: wrapperFallback.statusCommand,
@@ -420,7 +424,8 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
         postSliceRefresh: "Required after graph-relevant code changes.",
         postSliceSkipReason: "Required when post-slice refresh is intentionally skipped.",
       },
-      fallback: "Use focused source search and route through configured docs when graph tooling is stale, unavailable, or suspiciously low-signal.",
+      fallback:
+        "Use focused source search and route through configured docs when graph tooling is stale, unavailable, or suspiciously low-signal.",
       highRiskWarning: "Warn before proceeding when impact is HIGH or CRITICAL.",
     };
   }
@@ -438,7 +443,11 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
       install:
         "Install GitNexus as an MCP server in the host agent, index the repo with npx gitnexus analyze, then verify gitnexus tools and gitnexus:// resources are visible to the agent.",
       tools: ["gitnexus_query", "gitnexus_context", "gitnexus_impact", "gitnexus_detect_changes", "gitnexus_rename"],
-      resources: ["gitnexus://repo/{name}/context", "gitnexus://repo/{name}/clusters", "gitnexus://repo/{name}/processes"],
+      resources: [
+        "gitnexus://repo/{name}/context",
+        "gitnexus://repo/{name}/clusters",
+        "gitnexus://repo/{name}/processes",
+      ],
       staleIndexCommand: "npx gitnexus analyze",
     },
     wrapperFallback,
@@ -446,7 +455,7 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
     refreshCommand: "npx gitnexus analyze",
     queryCommand: "gitnexus_query({query})",
     contextCommand: "gitnexus_context({name})",
-    impactCommand: "gitnexus_impact({target, direction: \"upstream\"})",
+    impactCommand: 'gitnexus_impact({target, direction: "upstream"})',
     detectCommand: "gitnexus_detect_changes({changedFiles})",
     freshnessGate: {
       enabled: true,
@@ -455,14 +464,19 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
       postSliceRefresh: "Required after graph-relevant code changes.",
       postSliceSkipReason: "Required when post-slice refresh is intentionally skipped.",
     },
-    fallback: "If GitNexus MCP is unavailable or unreliable, use wrapperFallback when enabled; otherwise use focused source search and route through configured docs.",
+    fallback:
+      "If GitNexus MCP is unavailable or unreliable, use wrapperFallback when enabled; otherwise use focused source search and route through configured docs.",
     highRiskWarning: "Warn before proceeding when impact is HIGH or CRITICAL.",
   };
 }
 
 function inferContracts(targetRoot) {
   return {
-    featureArtifacts: existingRelativePaths(targetRoot, ["docs/feature-artifacts", "docs/features", "docs/contracts/features"]),
+    featureArtifacts: existingRelativePaths(targetRoot, [
+      "docs/feature-artifacts",
+      "docs/features",
+      "docs/contracts/features",
+    ]),
     stateContracts: existingRelativePaths(targetRoot, ["docs/state-contracts", "docs/contracts/state"]),
     surrogates: existingRelativePaths(targetRoot, [
       "docs/plans",
@@ -501,7 +515,8 @@ function inferVerification(targetRoot, pkg, args) {
     browserProvider === "agent-browser" ||
     existsSync(join(targetRoot, "agent-browser.json")) ||
     hasAnyPackageScript(pkg, ["agent-browser:reset", "dev:auto"]);
-  const finalBrowserProvider = browserProvider === "none" || (browserProvider === "auto" && !hasAgentBrowser) ? "none" : "agent-browser";
+  const finalBrowserProvider =
+    browserProvider === "none" || (browserProvider === "auto" && !hasAgentBrowser) ? "none" : "agent-browser";
 
   return {
     focusedChecksFirst: true,
@@ -592,14 +607,25 @@ async function buildConfig(targetRoot, args) {
     args["config-mode"] = configMode;
     const promptAdapters = shouldPrompt && configMode === "custom";
     const name = await promptText(rl, "App name", inferName(targetRoot, pkg, args), shouldPrompt);
-    const trackerProvider = await promptChoice(rl, "Tracker provider", String(args.tracker ?? "none"), ["none", "linear", "github", "file"], promptAdapters);
+    const trackerProvider = await promptChoice(
+      rl,
+      "Tracker provider",
+      String(args.tracker ?? "none"),
+      ["none", "linear", "github", "file"],
+      promptAdapters,
+    );
     args.tracker = trackerProvider;
     if (trackerProvider === "linear") {
       args["tracker-team"] = await promptText(rl, "Linear team", args["tracker-team"] ?? null, promptAdapters);
       args["tracker-project"] = await promptText(rl, "Linear project", args["tracker-project"] ?? null, promptAdapters);
     }
     if (trackerProvider === "github") {
-      args["tracker-project"] = await promptText(rl, "GitHub project or milestone", args["tracker-project"] ?? null, promptAdapters);
+      args["tracker-project"] = await promptText(
+        rl,
+        "GitHub project or milestone",
+        args["tracker-project"] ?? null,
+        promptAdapters,
+      );
     }
 
     const codeIntelligenceProvider = await promptChoice(
@@ -611,7 +637,13 @@ async function buildConfig(targetRoot, args) {
     );
     args["code-intelligence"] = codeIntelligenceProvider;
 
-    const browserProvider = await promptChoice(rl, "Browser provider", String(args.browser ?? "auto"), ["auto", "none", "agent-browser"], promptAdapters);
+    const browserProvider = await promptChoice(
+      rl,
+      "Browser provider",
+      String(args.browser ?? "auto"),
+      ["auto", "none", "agent-browser"],
+      promptAdapters,
+    );
     args.browser = browserProvider;
     if (browserProvider === "agent-browser") {
       args.origin = await promptText(rl, "Browser origin", args.origin ?? "http://127.0.0.1:3000", promptAdapters);
@@ -638,9 +670,13 @@ async function buildConfig(targetRoot, args) {
     }
 
     const reviewNeeded = [
-      ...(authority.productTruth.length === 0 ? ["No product truth doc was detected. Add one to authority.productTruth if the app has it."] : []),
+      ...(authority.productTruth.length === 0
+        ? ["No product truth doc was detected. Add one to authority.productTruth if the app has it."]
+        : []),
       ...(orientation.readBeforeBroadSearch.length === 0
-        ? ["No broad-search orientation doc was detected. Run `apex-map-codebase --target=. --write` or add an architecture/codebase doc."]
+        ? [
+            "No broad-search orientation doc was detected. Run `apex-map-codebase --target=. --write` or add an architecture/codebase doc.",
+          ]
         : []),
       ...(shouldCreateCodebaseMap ? [GENERATED_MAP_DRAFT_REVIEW_ITEM] : []),
       ...(contracts.featureArtifacts.length === 0 && contracts.stateContracts.length === 0
@@ -868,11 +904,7 @@ function createCodebaseMap(targetRoot, args) {
     return { skipped: false, path: mapPath, alreadyExists: true };
   }
 
-  const commandArgs = [
-    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
-    `--target=${targetRoot}`,
-    "--write",
-  ];
+  const commandArgs = [join(APEX_ROOT, "scripts/apex-map-codebase.mjs"), `--target=${targetRoot}`, "--write"];
   if (args["force-codebase-map"]) commandArgs.push("--force");
 
   const result = spawnSync(process.execPath, commandArgs, {
@@ -950,7 +982,10 @@ function printInstallReport({ config, targetRoot, dryRun }) {
 
   printPathRecords("authority.productTruth", config.setup?.inferredPaths?.authority?.productTruth ?? []);
   printPathRecords("authority.executionTruth", config.setup?.inferredPaths?.authority?.executionTruth ?? []);
-  printPathRecords("orientation.readBeforeBroadSearch", config.setup?.inferredPaths?.orientation?.readBeforeBroadSearch ?? []);
+  printPathRecords(
+    "orientation.readBeforeBroadSearch",
+    config.setup?.inferredPaths?.orientation?.readBeforeBroadSearch ?? [],
+  );
 
   if (config.operatorCautions?.length > 0) {
     console.log("- operator cautions:");
@@ -965,7 +1000,9 @@ function printInstallReport({ config, targetRoot, dryRun }) {
   }
 
   if (!dryRun && gitStatus.bootstrapDirty) {
-    console.log("- baseline checkpoint: commit AGENTS.md/apex.workflow.json setup before the first implementation slice");
+    console.log(
+      "- baseline checkpoint: commit AGENTS.md/apex.workflow.json setup before the first implementation slice",
+    );
   } else if (!dryRun && gitStatus.dirty) {
     console.log("- baseline checkpoint: repo is dirty; separate existing changes from the first implementation slice");
   } else if (!dryRun && gitStatus.available) {
@@ -1026,7 +1063,15 @@ async function main() {
     }
 
     if (!args["dry-run"]) validateGeneratedConfig(targetRoot);
-    printSummary({ targetRoot, configPath, agentsResult, skillResult, mapResult, dryRun: Boolean(args["dry-run"]), config });
+    printSummary({
+      targetRoot,
+      configPath,
+      agentsResult,
+      skillResult,
+      mapResult,
+      dryRun: Boolean(args["dry-run"]),
+      config,
+    });
   } catch (error) {
     if (!args["dry-run"] && !args["no-rollback"]) {
       const rollbackErrors = rollbackInstall(backups);

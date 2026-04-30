@@ -50,13 +50,20 @@ function git(target, args) {
 function writeDemoTarget(target) {
   mkdirSync(join(target, "docs/feature-artifacts"), { recursive: true });
   mkdirSync(join(target, "docs/state-contracts"), { recursive: true });
-  writeFileSync(join(target, "package.json"), `${JSON.stringify({
-    name: "apex-demo-target",
-    private: true,
-    scripts: {
-      test: "node --version",
-    },
-  }, null, 2)}\n`);
+  writeFileSync(
+    join(target, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "apex-demo-target",
+        private: true,
+        scripts: {
+          test: "node --version",
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
   writeFileSync(join(target, "README.md"), "# Apex Demo Target\n\nTemporary app for Apex quickstart smoke testing.\n");
   writeFileSync(join(target, "PRODUCT.md"), "# Product\n\nOperators can verify Apex on a clean demo target.\n");
   writeFileSync(join(target, ".gitignore"), "node_modules/\ntmp/\n");
@@ -86,30 +93,47 @@ function main() {
     git(target, ["add", "."]);
     git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]);
 
-    nodeScript("apex-doctor.mjs", [`--target=${target}`, "--config=apex.workflow.json", `--skill-dir=${skillDir}`, "--skip-commands"]);
-    nodeScript("apex-manifest.mjs", [
-      "new",
+    nodeScript("apex-doctor.mjs", [
+      `--target=${target}`,
       "--config=apex.workflow.json",
-      "--slug=quickstart-demo",
-      "--issue=none",
-      "--mode=tiny",
-      "--surface=README demo doc",
-      "--files=README.md",
-      "--downshift=tiny: quickstart smoke touches one known doc",
-      "--browser=skip: no UI in demo target",
-      "--typecheck=skip: demo target has no typecheck",
-      "--required=npm test",
-    ], { cwd: target });
-    nodeScript("apex-manifest.mjs", ["detect", "--config=apex.workflow.json", "--slug=quickstart-demo", "--write"], { cwd: target });
-    nodeScript("apex-manifest.mjs", ["run-check", "--config=apex.workflow.json", "--slug=quickstart-demo", "--cmd=npm test"], { cwd: target });
-    nodeScript("apex-manifest.mjs", [
-      "close",
-      "--config=apex.workflow.json",
-      "--slug=quickstart-demo",
-      "--skip-required",
-      "--next=none",
-    ], { cwd: target });
-    nodeScript("apex-manifest.mjs", ["finish", "--config=apex.workflow.json", "--slug=quickstart-demo", "--next=none"], { cwd: target });
+      `--skill-dir=${skillDir}`,
+      "--skip-commands",
+    ]);
+    nodeScript(
+      "apex-manifest.mjs",
+      [
+        "new",
+        "--config=apex.workflow.json",
+        "--slug=quickstart-demo",
+        "--issue=none",
+        "--mode=tiny",
+        "--surface=README demo doc",
+        "--files=README.md",
+        "--downshift=tiny: quickstart smoke touches one known doc",
+        "--browser=skip: no UI in demo target",
+        "--typecheck=skip: demo target has no typecheck",
+        "--required=npm test",
+      ],
+      { cwd: target },
+    );
+    nodeScript("apex-manifest.mjs", ["detect", "--config=apex.workflow.json", "--slug=quickstart-demo", "--write"], {
+      cwd: target,
+    });
+    nodeScript(
+      "apex-manifest.mjs",
+      ["run-check", "--config=apex.workflow.json", "--slug=quickstart-demo", "--cmd=npm test"],
+      { cwd: target },
+    );
+    nodeScript(
+      "apex-manifest.mjs",
+      ["close", "--config=apex.workflow.json", "--slug=quickstart-demo", "--skip-required", "--next=none"],
+      { cwd: target },
+    );
+    nodeScript(
+      "apex-manifest.mjs",
+      ["finish", "--config=apex.workflow.json", "--slug=quickstart-demo", "--next=none"],
+      { cwd: target },
+    );
 
     const manifest = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/quickstart-demo.json"), "utf8"));
     if (!manifest.checks?.runs?.some((run) => run.command === "npm test" && run.status === "passed")) {

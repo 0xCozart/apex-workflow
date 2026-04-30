@@ -1,7 +1,7 @@
 # Quickstart
 
-This path proves Apex on a temporary demo target with no tracker, no GitNexus,
-no browser automation, and no external accounts.
+This path proves Apex on a temporary demo target with no tracker, no GitNexus, no browser automation, and no external
+accounts.
 
 ## 1. Verify Apex
 
@@ -17,8 +17,8 @@ npm run self-check
 npm link
 ```
 
-This makes `apex-init`, `apex-map-codebase`, `apex-doctor`,
-`apex-manifest`, and `apex-check-config` available for local target repos.
+This makes `apex-init`, `apex-map-codebase`, `apex-doctor`, `apex-manifest`, and `apex-check-config` available for local
+target repos.
 
 ## 3. Create A Demo Target
 
@@ -54,15 +54,14 @@ apex-init \
   --yes
 ```
 
-Optional: create a draft orientation map when a target repo does not already
-have one:
+Optional: create a draft orientation map when a target repo does not already have one:
 
 ```bash
 apex-map-codebase --target=. --write
 ```
 
-Generated maps start as `Status: draft`. Review the file and remove all
-`REVIEW NEEDED` markers before marking it reviewed.
+Generated maps start as `Status: draft`. Review the file and remove all `REVIEW NEEDED` markers before marking it
+reviewed.
 
 Commit the generated setup before the first slice:
 
@@ -125,8 +124,8 @@ apex-manifest close --config=apex.workflow.json --slug=quickstart-demo --skip-re
 apex-manifest finish --config=apex.workflow.json --slug=quickstart-demo --next=none
 ```
 
-The manifest is at `tmp/apex-workflow/quickstart-demo.json`. Command logs are
-under `tmp/apex-workflow/logs/quickstart-demo/`.
+The manifest is at `tmp/apex-workflow/quickstart-demo.json`. Command logs are under
+`tmp/apex-workflow/logs/quickstart-demo/`.
 
 ## Automated Smoke
 

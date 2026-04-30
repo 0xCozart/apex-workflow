@@ -91,7 +91,11 @@
       "preferred": true,
       "install": "Install GitNexus as an MCP server in the host agent, index the repo with npx gitnexus analyze, then verify gitnexus tools and gitnexus:// resources are visible to the agent.",
       "tools": ["gitnexus_query", "gitnexus_context", "gitnexus_impact", "gitnexus_detect_changes", "gitnexus_rename"],
-      "resources": ["gitnexus://repo/minty/context", "gitnexus://repo/minty/clusters", "gitnexus://repo/minty/processes"],
+      "resources": [
+        "gitnexus://repo/minty/context",
+        "gitnexus://repo/minty/clusters",
+        "gitnexus://repo/minty/processes"
+      ],
       "staleIndexCommand": "npx gitnexus analyze"
     },
     "wrapperFallback": {

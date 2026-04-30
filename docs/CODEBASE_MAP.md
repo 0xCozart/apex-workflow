@@ -1,7 +1,6 @@
 # Codebase Map
 
-Status: reviewed
-Reviewed at: 2026-04-30T00:00:00.000Z
+Status: reviewed Reviewed at: 2026-04-30T00:00:00.000Z
 
 ## High-Level Layout
 
@@ -38,14 +37,16 @@ Reviewed at: 2026-04-30T00:00:00.000Z
 - `apex-manifest`: `scripts/apex-manifest.mjs`
 - `apex-check-config`: `scripts/check-config.mjs`
 - `apex-map-codebase`: `scripts/apex-map-codebase.mjs`
-- Maintainer checks: `npm run check:syntax`, `npm run check:portability`, `npm run check:config`, `npm run test:fixtures`, `npm run test:demo`, `npm run self-check`
+- Maintainer checks: `npm run check:syntax`, `npm run check:portability`, `npm run check:config`,
+  `npm run test:fixtures`, `npm run test:demo`, `npm run self-check`
 
 ## Data, State, Auth, And External Boundaries
 
 - Apex profiles and manifests are trusted executable workflow configuration.
 - Runtime artifacts should stay under ignored `tmp/apex-workflow/` and `tmp/agent-browser/`.
 - GitNexus, tracker, and browser integrations are optional adapters selected by target repo profile.
-- No command should require a private local path, private target repo, or local `upstream` remote for normal install, doctor, manifest, verification, close, or finish behavior.
+- No command should require a private local path, private target repo, or local `upstream` remote for normal install,
+  doctor, manifest, verification, close, or finish behavior.
 
 ## Frequent Edit Hotspots
 
@@ -81,7 +82,8 @@ Reviewed at: 2026-04-30T00:00:00.000Z
 
 ## Keeping This Map Current
 
-Update this map when CLI entry points move, profile schema behavior changes, fixture strategy changes, or docs/skills gain new authority over operator behavior.
+Update this map when CLI entry points move, profile schema behavior changes, fixture strategy changes, or docs/skills
+gain new authority over operator behavior.
 
 ## Map Evidence
 

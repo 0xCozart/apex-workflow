@@ -26,8 +26,7 @@ Read `references/gitnexus-mcp.md` for install and wrapper fallback details.
 
 ## GitNexus Wrapper Adapter
 
-When `codeIntelligence.provider` is `gitnexus-wrapper`, or when MCP fails and
-`wrapperFallback.enabled` is true:
+When `codeIntelligence.provider` is `gitnexus-wrapper`, or when MCP fails and `wrapperFallback.enabled` is true:
 
 1. Run the configured wrapper status command.
 2. Refresh only when stale and the work is medium, large, unfamiliar, or structural.
@@ -38,15 +37,13 @@ When `codeIntelligence.provider` is `gitnexus-wrapper`, or when MCP fails and
 
 ## Freshness Gate
 
-For GitNexus-enabled non-tiny code slices, Apex requires freshness evidence in
-the slice manifest before `close` or standalone `finish`:
+For GitNexus-enabled non-tiny code slices, Apex requires freshness evidence in the slice manifest before `close` or
+standalone `finish`:
 
 - `preSliceStatus`: always required.
-- `preSliceRefresh`: required when status is `stale`, `missing`, or marked
-  `refreshRequired`.
+- `preSliceRefresh`: required when status is `stale`, `missing`, or marked `refreshRequired`.
 - `postSliceRefresh`: required after graph-relevant code changes.
-- `postSliceSkipReason`: required when post-slice refresh is intentionally
-  skipped.
+- `postSliceSkipReason`: required when post-slice refresh is intentionally skipped.
 
 Record the gate explicitly:
 
@@ -61,10 +58,9 @@ apex-manifest \
 ```
 
 Use `--phase=pre-refresh --status=refreshed` after a required refresh. Use
-`--phase=post-refresh --status=refreshed --graph-relevant=true` when changed
-code should update the graph for the next slice. Use
-`--phase=post-skip --status=skipped --reason="docs-only slice"` only when the
-change does not affect future graph reasoning.
+`--phase=post-refresh --status=refreshed --graph-relevant=true` when changed code should update the graph for the next
+slice. Use `--phase=post-skip --status=skipped --reason="docs-only slice"` only when the change does not affect future
+graph reasoning.
 
 ## Search-Only Adapter
 
@@ -80,13 +76,10 @@ When no graph tool is configured:
 
 Prefer manifest-owned files over broad dirty-tree analysis.
 
-Broad dirty-tree output is branch context. It is not proof that the current
-slice stayed inside scope.
+Broad dirty-tree output is branch context. It is not proof that the current slice stayed inside scope.
 
-When `codeIntelligence.detectCommand` is missing, `apex-manifest detect` checks
-the current dirty tree against `ownedFiles`. Changed files outside the current
-manifest fail the detect step unless they are the manifest artifact itself.
-The exception is an explicit `dirtyPolicy=owned-files-only`, which is the
-default for reconciliation mode. In that mode, unrelated dirty files are
-recorded in the manifest as external state and detect only fails when the
+When `codeIntelligence.detectCommand` is missing, `apex-manifest detect` checks the current dirty tree against
+`ownedFiles`. Changed files outside the current manifest fail the detect step unless they are the manifest artifact
+itself. The exception is an explicit `dirtyPolicy=owned-files-only`, which is the default for reconciliation mode. In
+that mode, unrelated dirty files are recorded in the manifest as external state and detect only fails when the
 owned-file scope itself fails.

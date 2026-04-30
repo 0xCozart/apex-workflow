@@ -1,7 +1,8 @@
 # Apex Workflow
 
-> A repo-native control plane for Codex and LLM coding agents.
-> Stop letting agents improvise your engineering process. Install a harness that forces orientation, scope control, contract routing, MCP/GitNexus impact checks, verification, and clean handoff state.
+> A repo-native control plane for Codex and LLM coding agents. Stop letting agents improvise your engineering process.
+> Install a harness that forces orientation, scope control, contract routing, MCP/GitNexus impact checks, verification,
+> and clean handoff state.
 
 ![Codex Workflow](https://img.shields.io/badge/Codex-workflow%20harness-111827)
 ![LLM Agents](https://img.shields.io/badge/LLM%20agents-repo%20aware-0f766e)
@@ -11,34 +12,37 @@
 
 ## The Short Version
 
-Apex Workflow turns a repository into an agent-operable system: it installs an app-specific workflow profile, gives the agent a mode/state machine, and records every meaningful slice in a manifest before code gets touched. The result is less vague "I changed some files" automation and more controlled engineering: known authority docs, scoped ownership, explicit no-touch surfaces, code-intelligence checks, focused verification, and a next safe slice.
+Apex Workflow turns a repository into an agent-operable system: it installs an app-specific workflow profile, gives the
+agent a mode/state machine, and records every meaningful slice in a manifest before code gets touched. The result is
+less vague "I changed some files" automation and more controlled engineering: known authority docs, scoped ownership,
+explicit no-touch surfaces, code-intelligence checks, focused verification, and a next safe slice.
 
 ## Why This Exists
 
-Most LLM coding agents do not fail because they cannot write code. They fail because they enter a repo with no operational discipline.
+Most LLM coding agents do not fail because they cannot write code. They fail because they enter a repo with no
+operational discipline.
 
-They search before reading the authority chain. They edit shared surfaces as if they were local helpers. They lose track of which files belong to the current slice. They treat screenshots as visual signoff. They skip tracker state or create junk tickets. Then the next session has to reconstruct the mess from a dirty tree and half-remembered chat.
+They search before reading the authority chain. They edit shared surfaces as if they were local helpers. They lose track
+of which files belong to the current slice. They treat screenshots as visual signoff. They skip tracker state or create
+junk tickets. Then the next session has to reconstruct the mess from a dirty tree and half-remembered chat.
 
 Apex is the antidote: a portable workflow harness that makes the agent follow the repo's actual operating model.
 
 ## Trust Model
 
-Apex profiles and manifests are trusted executable workflow configuration. Some
-Apex commands run shell commands declared in the profile, manifest, or CLI
-arguments. Read [SECURITY.md](SECURITY.md) before installing Apex into an
+Apex profiles and manifests are trusted executable workflow configuration. Some Apex commands run shell commands
+declared in the profile, manifest, or CLI arguments. Read [SECURITY.md](SECURITY.md) before installing Apex into an
 unfamiliar repository or running manifests from another source.
 
 ## Remote Policy
 
-Apex requires a normal Git repo and uses `origin` as the working remote when
-GitHub-backed workflows are needed.
+Apex requires a normal Git repo and uses `origin` as the working remote when GitHub-backed workflows are needed.
 
-A local `upstream` remote is optional. Apex must not fail install, doctor,
-manifest creation, verification, close, or finish-packet generation because
-`upstream` is missing.
+A local `upstream` remote is optional. Apex must not fail install, doctor, manifest creation, verification, close, or
+finish-packet generation because `upstream` is missing.
 
-`upstream` is only relevant for explicit parent-sync, fork-drift comparison, or
-contributing changes back to a parent repository.
+`upstream` is only relevant for explicit parent-sync, fork-drift comparison, or contributing changes back to a parent
+repository.
 
 ## Architecture
 
@@ -133,8 +137,7 @@ From the Apex repo, make the local CLI shims available during development:
 npm link
 ```
 
-First-time adopters can follow the no-service path in
-[docs/quickstart.md](docs/quickstart.md).
+First-time adopters can follow the no-service path in [docs/quickstart.md](docs/quickstart.md).
 
 Ask the agent installing Apex one setup question:
 
@@ -163,9 +166,11 @@ apex-init \
   --yes
 ```
 
-The installer writes `apex.workflow.json`, adds a managed Apex block to the target repo's `AGENTS.md`, validates the profile, and symlinks the `$apex-workflow` skill into the local Codex skills directory.
+The installer writes `apex.workflow.json`, adds a managed Apex block to the target repo's `AGENTS.md`, validates the
+profile, and symlinks the `$apex-workflow` skill into the local Codex skills directory.
 
-It also prints an install report: inferred authority paths with confidence, adapter choices, dirty repo state, review items, and whether to commit the harness setup before the first implementation slice.
+It also prints an install report: inferred authority paths with confidence, adapter choices, dirty repo state, review
+items, and whether to commit the harness setup before the first implementation slice.
 
 Before the first implementation slice, run the doctor against the target repo:
 
@@ -173,20 +178,20 @@ Before the first implementation slice, run the doctor against the target repo:
 apex-doctor --target=/path/to/app --config=apex.workflow.json
 ```
 
-The doctor checks unresolved setup review items, guessed inferred paths, whether `tmp/apex-workflow/` is ignored, the managed `AGENTS.md` block, adapter readiness, the local skill symlink, and whether the installed setup has a clean baseline checkpoint.
+The doctor checks unresolved setup review items, guessed inferred paths, whether `tmp/apex-workflow/` is ignored, the
+managed `AGENTS.md` block, adapter readiness, the local skill symlink, and whether the installed setup has a clean
+baseline checkpoint.
 
 ## Create A Codebase Map
 
-If the install report says no broad-search orientation doc was detected, create
-a draft map:
+If the install report says no broad-search orientation doc was detected, create a draft map:
 
 ```bash
 apex-map-codebase --target=/path/to/app --write
 ```
 
-The generated `docs/CODEBASE_MAP.md` starts as `Status: draft`. It is a
-scaffold, not authority. Review the file, resolve every `REVIEW NEEDED` marker,
-then mark it reviewed and sync the profile:
+The generated `docs/CODEBASE_MAP.md` starts as `Status: draft`. It is a scaffold, not authority. Review the file,
+resolve every `REVIEW NEEDED` marker, then mark it reviewed and sync the profile:
 
 ```bash
 cd /path/to/app
@@ -194,9 +199,8 @@ apex-map-codebase --target=. --mark-reviewed --sync-profile
 apex-map-codebase --target=. --check --require-reviewed
 ```
 
-`apex-init --create-codebase-map` can create the draft during install. It keeps
-a setup review item until the map is reviewed so agents do not treat generated
-guesses as confirmed routing truth.
+`apex-init --create-codebase-map` can create the draft during install. It keeps a setup review item until the map is
+reviewed so agents do not treat generated guesses as confirmed routing truth.
 
 ## What The Profile Controls
 
@@ -224,18 +228,20 @@ guesses as confirmed routing truth.
 }
 ```
 
-It tells the agent what counts as product truth, what workflow rules to read, which tracker to use, whether GitNexus runs through MCP or a wrapper, where contract docs live, which checks matter, and how browser evidence should be treated.
+It tells the agent what counts as product truth, what workflow rules to read, which tracker to use, whether GitNexus
+runs through MCP or a wrapper, where contract docs live, which checks matter, and how browser evidence should be
+treated.
 
 ## Modes
 
-| Mode | Use When | Guardrail |
-| --- | --- | --- |
-| `tiny` | One known file, low blast radius | Direct file read, path-scoped check |
-| `route-local` | One owner with obvious callers | Manifest, owner docs, focused verification |
-| `shared-surface` | Shared shell/store/hook/auth/workspace | Contracts, impact analysis, no-touch list |
-| `issue-resume` | Named tracker issue or dirty continuation | Latest state, first real gap, no widening |
-| `planning` | Product/design/architecture before code | Durable decision artifact when useful |
-| `reconciliation` | Code landed, remaining work is review/tracker/audit | Evidence packet, no reopened code flow |
+| Mode             | Use When                                            | Guardrail                                  |
+| ---------------- | --------------------------------------------------- | ------------------------------------------ |
+| `tiny`           | One known file, low blast radius                    | Direct file read, path-scoped check        |
+| `route-local`    | One owner with obvious callers                      | Manifest, owner docs, focused verification |
+| `shared-surface` | Shared shell/store/hook/auth/workspace              | Contracts, impact analysis, no-touch list  |
+| `issue-resume`   | Named tracker issue or dirty continuation           | Latest state, first real gap, no widening  |
+| `planning`       | Product/design/architecture before code             | Durable decision artifact when useful      |
+| `reconciliation` | Code landed, remaining work is review/tracker/audit | Evidence packet, no reopened code flow     |
 
 ## GitNexus Strategy
 
@@ -249,7 +255,9 @@ When GitNexus is selected, the profile prefers:
 - `gitnexus_detect_changes`
 - `gitnexus://repo/{name}/context`
 
-If MCP fails because of host config, runtime, stale reloads, or local storage issues, Apex records a wrapper fallback. That wrapper should expose the same intent through repo-local commands like `npm run gitnexus:status`, `npm run gitnexus -- impact <symbol>`, and manifest-backed `detect_changes`.
+If MCP fails because of host config, runtime, stale reloads, or local storage issues, Apex records a wrapper fallback.
+That wrapper should expose the same intent through repo-local commands like `npm run gitnexus:status`,
+`npm run gitnexus -- impact <symbol>`, and manifest-backed `detect_changes`.
 
 MCP is the clean path. The wrapper is the survival path.
 
@@ -260,7 +268,8 @@ The profile records these separately:
 - current host availability
 - fallback command readiness
 
-Install-time repo evidence can detect wrapper scripts or GitNexus markers, but host MCP availability is only proven in the active agent session.
+Install-time repo evidence can detect wrapper scripts or GitNexus markers, but host MCP availability is only proven in
+the active agent session.
 
 ## Manifests And Finish Packets
 
@@ -276,11 +285,9 @@ apex-manifest new \
   --downshift="route-local: one owner and focused checks cover this slice"
 ```
 
-Run detect immediately after manifest creation. This catches wrong schema,
-placeholder fields, missing required check disposition, and dirty files outside
-the manifest before implementation starts. Reconciliation manifests default to
-`dirtyPolicy=owned-files-only`, so unrelated dirty files are recorded as
-external state instead of failing the slice:
+Run detect immediately after manifest creation. This catches wrong schema, placeholder fields, missing required check
+disposition, and dirty files outside the manifest before implementation starts. Reconciliation manifests default to
+`dirtyPolicy=owned-files-only`, so unrelated dirty files are recorded as external state instead of failing the slice:
 
 ```bash
 apex-manifest detect \
@@ -297,15 +304,12 @@ apex-manifest run-check \
   --cmd="npm test"
 ```
 
-Command runs are recorded in `checks.runs` with command source, exit code,
-timestamps, cwd, git head, evidence fingerprints, stdout/stderr tails, timeout
-metadata, and a hashed log file under `tmp/apex-workflow/logs/<slice>/`.
-Command output and persisted command strings are redacted for common token
-shapes. The default command timeout is 120000 ms; override it per run with
-`--timeout-ms=<milliseconds>` when a legitimate check needs longer.
+Command runs are recorded in `checks.runs` with command source, exit code, timestamps, cwd, git head, evidence
+fingerprints, stdout/stderr tails, timeout metadata, and a hashed log file under `tmp/apex-workflow/logs/<slice>/`.
+Command output and persisted command strings are redacted for common token shapes. The default command timeout is 120000
+ms; override it per run with `--timeout-ms=<milliseconds>` when a legitimate check needs longer.
 
-Record manual terminal, TUI, or operator evidence without pretending it was an
-automated check:
+Record manual terminal, TUI, or operator evidence without pretending it was an automated check:
 
 ```bash
 apex-manifest record-evidence \
@@ -316,8 +320,7 @@ apex-manifest record-evidence \
   --source="local TUI"
 ```
 
-For GitNexus-enabled non-tiny code slices, record freshness evidence before
-close:
+For GitNexus-enabled non-tiny code slices, record freshness evidence before close:
 
 ```bash
 apex-manifest record-gitnexus-freshness \
@@ -328,11 +331,9 @@ apex-manifest record-gitnexus-freshness \
   --command="npm run gitnexus:status"
 ```
 
-If the pre-slice status is stale or missing, refresh and record
-`--phase=pre-refresh --status=refreshed`. After graph-relevant code changes,
-refresh and record `--phase=post-refresh`; otherwise record
-`--phase=post-skip --status=skipped --reason="docs-only slice"` or the real
-skip reason.
+If the pre-slice status is stale or missing, refresh and record `--phase=pre-refresh --status=refreshed`. After
+graph-relevant code changes, refresh and record `--phase=post-refresh`; otherwise record
+`--phase=post-skip --status=skipped --reason="docs-only slice"` or the real skip reason.
 
 Close a slice with the generic control-plane path:
 
@@ -352,14 +353,11 @@ apex-manifest close \
   --preview-commands
 ```
 
-`close` runs detect, runs and records required manifest checks, records
-`git diff --check`, and prints the finish packet. With
-`dirtyPolicy=owned-files-only`, the diff check is scoped to `ownedFiles`; if no
-owned files are listed, it records a skipped diff-check entry instead of
-testing unrelated dirty work. For GitNexus-enabled non-tiny code slices, `close`
-also refuses to finish until the freshness gate has pre-slice and post-slice
-evidence. When required checks are skipped, `close` refuses stale check evidence
-unless `--allow-stale-evidence="<reason>"` is provided and recorded.
+`close` runs detect, runs and records required manifest checks, records `git diff --check`, and prints the finish
+packet. With `dirtyPolicy=owned-files-only`, the diff check is scoped to `ownedFiles`; if no owned files are listed, it
+records a skipped diff-check entry instead of testing unrelated dirty work. For GitNexus-enabled non-tiny code slices,
+`close` also refuses to finish until the freshness gate has pre-slice and post-slice evidence. When required checks are
+skipped, `close` refuses stale check evidence unless `--allow-stale-evidence="<reason>"` is provided and recorded.
 
 Generate a handoff packet from the manifest:
 
@@ -377,10 +375,14 @@ apex-manifest finish \
 
 - **It makes repo authority explicit.** The agent reads the right docs before broad search.
 - **It makes scope tangible.** The manifest names owned files, no-touch surfaces, checks, and next slice.
-- **It prevents overbuilt process.** Mode selection lets tiny work stay tiny and shared work get the heavier guardrails it deserves.
-- **It separates concerns.** Product truth, tracker state, graph intelligence, browser evidence, and verification are different systems.
-- **It supports real-world failure.** If MCP breaks, fallback paths are documented instead of pretending the tool is fine.
-- **It improves handoff quality.** Every meaningful pass ends with what landed, what was verified, what was not verified, and what comes next.
+- **It prevents overbuilt process.** Mode selection lets tiny work stay tiny and shared work get the heavier guardrails
+  it deserves.
+- **It separates concerns.** Product truth, tracker state, graph intelligence, browser evidence, and verification are
+  different systems.
+- **It supports real-world failure.** If MCP breaks, fallback paths are documented instead of pretending the tool is
+  fine.
+- **It improves handoff quality.** Every meaningful pass ends with what landed, what was verified, what was not
+  verified, and what comes next.
 
 ## Pros And Cons
 
@@ -432,16 +434,17 @@ npm run test:fixtures
 npm run self-check
 ```
 
-`self-check` is clean-room runnable: it validates the repo-local service-desk
-fixture and uses temporary fixture repos instead of any private target app.
-Private app profile validation belongs in guarded scripts such as
+`self-check` is clean-room runnable: it validates the repo-local service-desk fixture and uses temporary fixture repos
+instead of any private target app. Private app profile validation belongs in guarded scripts such as
 `MINTY_TARGET=/path/to/private/repo npm run check:minty`.
 
 ## License
 
-Apex Workflow is released under the [MIT License](LICENSE). The package remains
-private and is not configured for npm publishing.
+Apex Workflow is released under the [MIT License](LICENSE). The package remains private and is not configured for npm
+publishing.
 
 ## The Philosophy
 
-Apex does not try to make agents autonomous by removing process. It makes them effective by giving them the process a senior engineer would enforce anyway: read the repo, choose the smallest safe mode, respect contracts, prove the slice, and leave the next agent a clean trail.
+Apex does not try to make agents autonomous by removing process. It makes them effective by giving them the process a
+senior engineer would enforce anyway: read the repo, choose the smallest safe mode, respect contracts, prove the slice,
+and leave the next agent a clean trail.

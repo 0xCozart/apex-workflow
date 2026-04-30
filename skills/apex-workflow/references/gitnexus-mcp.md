@@ -29,9 +29,8 @@ npx gitnexus analyze
    - `gitnexus_rename`
    - `gitnexus://repo/{name}/context`
 
-If the host's GitNexus package exposes a different MCP server command, use that
-host/package command. The Apex profile records the desired behavior, not one
-hard-coded MCP transport command.
+If the host's GitNexus package exposes a different MCP server command, use that host/package command. The Apex profile
+records the desired behavior, not one hard-coded MCP transport command.
 
 ## MCP Usage
 
@@ -43,9 +42,8 @@ hard-coded MCP transport command.
 
 ## Wrapper Fallback
 
-If MCP fails because of local storage, package/runtime, transport, stale reload,
-or host config problems, use a repo-local wrapper fallback instead of blocking
-the work.
+If MCP fails because of local storage, package/runtime, transport, stale reload, or host config problems, use a
+repo-local wrapper fallback instead of blocking the work.
 
 The wrapper should expose the same intent:
 

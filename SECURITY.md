@@ -2,9 +2,8 @@
 
 Apex profiles and manifests are trusted executable workflow configuration.
 
-Some Apex commands run shell commands declared in `apex.workflow.json`, slice
-manifests, or CLI arguments. Review profiles, manifests, and generated commands
-before running Apex against an unfamiliar repository.
+Some Apex commands run shell commands declared in `apex.workflow.json`, slice manifests, or CLI arguments. Review
+profiles, manifests, and generated commands before running Apex against an unfamiliar repository.
 
 ## Command Execution Surfaces
 
@@ -17,8 +16,7 @@ Apex may execute shell commands through:
 - code-intelligence detect commands
 - tracker, browser, and adapter status commands used by doctor/readiness checks
 
-Command execution is intentional because Apex is a local workflow harness, not a
-sandbox.
+Command execution is intentional because Apex is a local workflow harness, not a sandbox.
 
 ## Installer Writes
 
@@ -27,16 +25,15 @@ The installer may:
 - write `apex.workflow.json`
 - create or update the managed Apex block in `AGENTS.md`
 - create or update the managed Apex block in `.gitignore`
-- symlink the local `apex-workflow` skill into the configured Codex skills
-  directory unless `--skip-skill-link` is passed
+- symlink the local `apex-workflow` skill into the configured Codex skills directory unless `--skip-skill-link` is
+  passed
 
 Use `--dry-run` before installing Apex into an unfamiliar repository.
 
 ## Untrusted Inputs
 
-Do not run Apex against untrusted profiles, manifests, or repositories without
-reviewing the generated commands first. Treat copied manifests and profiles like
-shell scripts from the same source.
+Do not run Apex against untrusted profiles, manifests, or repositories without reviewing the generated commands first.
+Treat copied manifests and profiles like shell scripts from the same source.
 
 Secrets should never be stored in:
 
@@ -46,7 +43,6 @@ Secrets should never be stored in:
 - finish packets
 - copied terminal output
 
-Manifest command logs redact common secret-like values, cap manifest output
-tails, and record command timeouts. Apex does not record environment dumps by
-default. If `verification.envAllowlist` is configured, Apex fingerprints the
+Manifest command logs redact common secret-like values, cap manifest output tails, and record command timeouts. Apex
+does not record environment dumps by default. If `verification.envAllowlist` is configured, Apex fingerprints the
 selected values for freshness without storing raw environment values.

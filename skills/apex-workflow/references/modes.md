@@ -28,8 +28,7 @@ Required evidence:
 
 ## shared-surface
 
-Use when a shell, store, hook, auth path, workspace state, route owner, or
-multi-route surface can affect neighbors.
+Use when a shell, store, hook, auth path, workspace state, route owner, or multi-route surface can affect neighbors.
 
 Required evidence:
 
@@ -57,8 +56,7 @@ Do not widen the issue just because adjacent problems are visible.
 
 ## planning
 
-Use when the work is product, design, architecture, or workflow decision-making
-before code.
+Use when the work is product, design, architecture, or workflow decision-making before code.
 
 Required evidence:
 
@@ -69,12 +67,10 @@ Required evidence:
 
 ## reconciliation
 
-Use when implementation appears landed and remaining work is review, tracker,
-audit, or wait-state management.
+Use when implementation appears landed and remaining work is review, tracker, audit, or wait-state management.
 
 Required evidence:
 
 - reduced evidence packet
 - tracker disposition
 - no code-flow reopening unless a real implementation gap appears
-

@@ -25,7 +25,5 @@ It is not visual signoff unless the profile explicitly allows that.
 
 ## Human Visual Signoff
 
-When the profile says visual signoff is human-only, finish visible UI work with
-a short checklist of what a human should inspect. Do not claim final visual
-approval from screenshots.
-
+When the profile says visual signoff is human-only, finish visible UI work with a short checklist of what a human should
+inspect. Do not claim final visual approval from screenshots.

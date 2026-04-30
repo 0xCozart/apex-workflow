@@ -1,13 +1,11 @@
 # Routing And Contracts
 
-Find the owning surface before editing. A symbol hit is routing evidence, not
-final context.
+Find the owning surface before editing. A symbol hit is routing evidence, not final context.
 
 ## Route
 
-1. Read profile orientation docs. If `docs/CODEBASE_MAP.md` is present but
-   `Status: draft`, use it only as a scaffold and verify ownership in source.
-   Treat it as routing authority only after
+1. Read profile orientation docs. If `docs/CODEBASE_MAP.md` is present but `Status: draft`, use it only as a scaffold
+   and verify ownership in source. Treat it as routing authority only after
    `apex-map-codebase --check --require-reviewed` passes.
 2. Use configured code-intelligence query/context when ownership is unclear.
 3. Route from low-level symbols back to product surfaces.
@@ -27,5 +25,5 @@ final context.
 
 ## No-Touch Surfaces
 
-Every meaningful manifest should list no-touch surfaces when the repo is dirty,
-when another agent may be working, or when adjacent high-risk areas are visible.
+Every meaningful manifest should list no-touch surfaces when the repo is dirty, when another agent may be working, or
+when adjacent high-risk areas are visible.

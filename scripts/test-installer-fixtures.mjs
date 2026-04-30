@@ -34,7 +34,11 @@ function run(args, options = {}) {
 function portableCommand(command) {
   const value = String(command);
   if (process.platform !== "win32") return value;
-  if (value.toLowerCase().endsWith(".cmd") || value.toLowerCase().endsWith(".exe") || value.toLowerCase().endsWith(".bat")) {
+  if (
+    value.toLowerCase().endsWith(".cmd") ||
+    value.toLowerCase().endsWith(".exe") ||
+    value.toLowerCase().endsWith(".bat")
+  ) {
     return value;
   }
   const cmdShim = `${value}.cmd`;
@@ -76,6 +80,13 @@ function git(target, args) {
   });
 }
 
+function waitMs(ms) {
+  spawnSync(process.execPath, ["-e", `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ${Number(ms)})`], {
+    encoding: "utf8",
+    stdio: "pipe",
+  });
+}
+
 function makeTarget(root, fixtureName, targetName = fixtureName) {
   const target = join(root, targetName);
   cpSync(join(FIXTURES_ROOT, fixtureName), target, { recursive: true });
@@ -109,24 +120,38 @@ function testNoAdaptersDoctor(root) {
   const target = makeTarget(root, "no-adapters");
   const skillDir = join(root, "skills");
   rmSync(join(target, ".gitignore"), { force: true });
-  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"], skillDir);
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
 
   const config = readConfig(target);
   assert(config.tracker.provider === "none", "no-adapters tracker should be none");
   assert(config.codeIntelligence.provider === "focused-search", "no-adapters should use focused-search");
   assert(config.verification.browser.provider === "none", "no-adapters browser should be none");
-  assert(readFileSync(join(target, "AGENTS.md"), "utf8").includes("<!-- apex-workflow:start -->"), "AGENTS managed block missing");
+  assert(
+    readFileSync(join(target, "AGENTS.md"), "utf8").includes("<!-- apex-workflow:start -->"),
+    "AGENTS managed block missing",
+  );
   const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
   assert(gitignore.includes("# apex-workflow:start"), "Apex .gitignore block missing");
   assert(gitignore.includes("tmp/apex-workflow/"), "Apex manifest artifact ignore missing");
   assert(gitignore.includes("tmp/agent-browser/"), "Apex browser artifact ignore missing");
 
   assert(git(target, ["init"]).status === 0, "git init failed");
-  assert(git(target, ["check-ignore", "-q", "tmp/apex-workflow/fixture-slice.json"]).status === 0, "Apex manifest path should be ignored");
-  assert(git(target, ["check-ignore", "-q", "tmp/agent-browser/snapshot.json"]).status === 0, "Apex browser artifact path should be ignored");
+  assert(
+    git(target, ["check-ignore", "-q", "tmp/apex-workflow/fixture-slice.json"]).status === 0,
+    "Apex manifest path should be ignored",
+  );
+  assert(
+    git(target, ["check-ignore", "-q", "tmp/agent-browser/snapshot.json"]).status === 0,
+    "Apex browser artifact path should be ignored",
+  );
   assert(git(target, ["add", "."]).status === 0, "git add failed");
   assert(
-    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"])
+      .status === 0,
     "git commit failed",
   );
 
@@ -141,36 +166,45 @@ function testNoAdaptersDoctor(root) {
     "doctor should warn about trusted executable command configuration",
   );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "new",
-    "--config=apex.workflow.json",
-    "--slug=fixture-slice",
-    "--issue=none",
-    "--mode=tiny",
-    "--surface=product doc",
-    "--files=PRODUCT.md",
-    "--downshift=tiny: one known fixture doc",
-    "--browser=skip: docs only",
-    "--typecheck=skip: fixture docs only",
-    "--required=node --version",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=fixture-slice",
+      "--issue=none",
+      "--mode=tiny",
+      "--surface=product doc",
+      "--files=PRODUCT.md",
+      "--downshift=tiny: one known fixture doc",
+      "--browser=skip: docs only",
+      "--typecheck=skip: fixture docs only",
+      "--required=node --version",
+    ],
+    { cwd: target },
+  );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "detect",
-    "--config=apex.workflow.json",
-    "--slug=fixture-slice",
-    "--write",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "detect",
+      "--config=apex.workflow.json",
+      "--slug=fixture-slice",
+      "--write",
+    ],
+    { cwd: target },
+  );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "close",
-    "--config=apex.workflow.json",
-    "--slug=fixture-slice",
-    "--next=none",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "close",
+      "--config=apex.workflow.json",
+      "--slug=fixture-slice",
+      "--next=none",
+    ],
+    { cwd: target },
+  );
 
   const manifest = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/fixture-slice.json"), "utf8"));
   assert(manifest.codeIntelligence.detect?.provider === "built-in", "detect result should be recorded");
@@ -206,63 +240,80 @@ function testNoAdaptersDoctor(root) {
 function testStaleEvidenceDetection(root) {
   const target = makeTarget(root, "no-adapters", "stale-evidence");
   const skillDir = join(root, "skills-stale-evidence");
-  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"], skillDir);
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
 
   assert(git(target, ["init"]).status === 0, "git init failed");
   assert(git(target, ["add", "."]).status === 0, "git add failed");
   assert(
-    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"])
+      .status === 0,
     "git commit failed",
   );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "new",
-    "--config=apex.workflow.json",
-    "--slug=stale-evidence",
-    "--issue=none",
-    "--mode=tiny",
-    "--surface=product doc",
-    "--files=PRODUCT.md",
-    "--downshift=tiny: stale evidence fixture",
-    "--browser=skip: docs only",
-    "--typecheck=skip: fixture docs only",
-    "--required=node --version",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=stale-evidence",
+      "--issue=none",
+      "--mode=tiny",
+      "--surface=product doc",
+      "--files=PRODUCT.md",
+      "--downshift=tiny: stale evidence fixture",
+      "--browser=skip: docs only",
+      "--typecheck=skip: fixture docs only",
+      "--required=node --version",
+    ],
+    { cwd: target },
+  );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "run-check",
-    "--config=apex.workflow.json",
-    "--slug=stale-evidence",
-    "--cmd=node --version",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=stale-evidence",
+      "--cmd=node --version",
+    ],
+    { cwd: target },
+  );
 
   writeFileSync(join(target, "PRODUCT.md"), "# Product\n\nChanged after evidence.\n");
 
-  const staleClose = run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "close",
-    "--config=apex.workflow.json",
-    "--slug=stale-evidence",
-    "--skip-required",
-    "--next=none",
-  ], { cwd: target, allowFailure: true });
+  const staleClose = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "close",
+      "--config=apex.workflow.json",
+      "--slug=stale-evidence",
+      "--skip-required",
+      "--next=none",
+    ],
+    { cwd: target, allowFailure: true },
+  );
   assert(staleClose.status !== 0, "close should fail when skipped required evidence is stale");
   assert(
     `${staleClose.stdout}\n${staleClose.stderr}`.includes("stale required evidence"),
     "stale evidence failure should explain the problem",
   );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "close",
-    "--config=apex.workflow.json",
-    "--slug=stale-evidence",
-    "--skip-required",
-    "--allow-stale-evidence=fixture intentionally reuses prior node version check",
-    "--next=none",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "close",
+      "--config=apex.workflow.json",
+      "--slug=stale-evidence",
+      "--skip-required",
+      "--allow-stale-evidence=fixture intentionally reuses prior node version check",
+      "--next=none",
+    ],
+    { cwd: target },
+  );
 
   const manifest = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/stale-evidence.json"), "utf8"));
   assert(
@@ -274,37 +325,48 @@ function testStaleEvidenceDetection(root) {
 function testCommandPreviewAndPlaceholderFailure(root) {
   const target = makeTarget(root, "no-adapters", "command-preview");
   const skillDir = join(root, "skills-command-preview");
-  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"], skillDir);
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
 
   assert(git(target, ["init"]).status === 0, "git init failed");
   assert(git(target, ["add", "."]).status === 0, "git add failed");
   assert(
-    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"])
+      .status === 0,
     "git commit failed",
   );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "new",
-    "--config=apex.workflow.json",
-    "--slug=preview-slice",
-    "--issue=none",
-    "--mode=tiny",
-    "--surface=product doc",
-    "--files=PRODUCT.md",
-    "--downshift=tiny: command preview fixture",
-    "--browser=skip: docs only",
-    "--typecheck=skip: fixture docs only",
-    "--required=node --version",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=preview-slice",
+      "--issue=none",
+      "--mode=tiny",
+      "--surface=product doc",
+      "--files=PRODUCT.md",
+      "--downshift=tiny: command preview fixture",
+      "--browser=skip: docs only",
+      "--typecheck=skip: fixture docs only",
+      "--required=node --version",
+    ],
+    { cwd: target },
+  );
 
-  const preview = run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "close",
-    "--config=apex.workflow.json",
-    "--slug=preview-slice",
-    "--preview-commands",
-  ], { cwd: target });
+  const preview = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "close",
+      "--config=apex.workflow.json",
+      "--slug=preview-slice",
+      "--preview-commands",
+    ],
+    { cwd: target },
+  );
   assert(preview.stdout.includes("close command preview"), "preview should print a command preview header");
   assert(preview.stdout.includes("[close-required] node --version"), "preview should list required command");
   assert(preview.stdout.includes("[close-diff/will-run] git diff --check"), "preview should list diff check");
@@ -312,13 +374,16 @@ function testCommandPreviewAndPlaceholderFailure(root) {
   const previewManifest = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/preview-slice.json"), "utf8"));
   assert((previewManifest.checks.runs ?? []).length === 0, "preview should not run or record commands");
 
-  const unresolved = run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "run-check",
-    "--config=apex.workflow.json",
-    "--slug=preview-slice",
-    "--cmd=node {missingPlaceholder}",
-  ], { cwd: target, allowFailure: true });
+  const unresolved = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=preview-slice",
+      "--cmd=node {missingPlaceholder}",
+    ],
+    { cwd: target, allowFailure: true },
+  );
   assert(unresolved.status !== 0, "unresolved placeholders should fail before command execution");
   assert(
     `${unresolved.stdout}\n${unresolved.stderr}`.includes("unresolved placeholder"),
@@ -329,55 +394,75 @@ function testCommandPreviewAndPlaceholderFailure(root) {
 function testReconciliationOwnedFilesOnly(root) {
   const target = makeTarget(root, "no-adapters", "no-adapters-reconciliation");
   const skillDir = join(root, "skills-reconciliation");
-  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"], skillDir);
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
 
   assert(git(target, ["init"]).status === 0, "git init failed");
   assert(git(target, ["add", "."]).status === 0, "git add failed");
   assert(
-    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"])
+      .status === 0,
     "git commit failed",
   );
 
   writeFileSync(join(target, "UNRELATED.md"), "pre-existing external dirty work\n");
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "new",
-    "--config=apex.workflow.json",
-    "--slug=reconcile-slice",
-    "--issue=none",
-    "--mode=reconciliation",
-    "--surface=manual evidence reconciliation",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=reconcile-slice",
+      "--issue=none",
+      "--mode=reconciliation",
+      "--surface=manual evidence reconciliation",
+    ],
+    { cwd: target },
+  );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "detect",
-    "--config=apex.workflow.json",
-    "--slug=reconcile-slice",
-    "--write",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "detect",
+      "--config=apex.workflow.json",
+      "--slug=reconcile-slice",
+      "--write",
+    ],
+    { cwd: target },
+  );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "record-evidence",
-    "--config=apex.workflow.json",
-    "--slug=reconcile-slice",
-    "--kind=manual-terminal",
-    "--summary=TUI launched with selected provider and real session id",
-    "--source=fixture terminal",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "record-evidence",
+      "--config=apex.workflow.json",
+      "--slug=reconcile-slice",
+      "--kind=manual-terminal",
+      "--summary=TUI launched with selected provider and real session id",
+      "--source=fixture terminal",
+    ],
+    { cwd: target },
+  );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "close",
-    "--config=apex.workflow.json",
-    "--slug=reconcile-slice",
-    "--next=none",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "close",
+      "--config=apex.workflow.json",
+      "--slug=reconcile-slice",
+      "--next=none",
+    ],
+    { cwd: target },
+  );
 
   const manifest = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/reconcile-slice.json"), "utf8"));
-  assert(manifest.scope?.dirtyPolicy === "owned-files-only", "reconciliation should default to owned-files-only dirty policy");
+  assert(
+    manifest.scope?.dirtyPolicy === "owned-files-only",
+    "reconciliation should default to owned-files-only dirty policy",
+  );
   assert(
     manifest.scope?.externalDirtyFiles?.includes("UNRELATED.md"),
     "external dirty file should be recorded on manifest scope",
@@ -399,109 +484,134 @@ function testReconciliationOwnedFilesOnly(root) {
 function testLinearGitNexusWrapper(root) {
   const target = makeTarget(root, "linear-gitnexus-wrapper");
   const skillDir = join(root, "skills");
-  initHarness(target, [
-    "--config-mode=custom",
-    "--tracker=linear",
-    "--tracker-team=Ops",
-    "--tracker-project=Launch",
-    "--code-intelligence=gitnexus-wrapper",
-    "--browser=none",
-  ], skillDir);
+  initHarness(
+    target,
+    [
+      "--config-mode=custom",
+      "--tracker=linear",
+      "--tracker-team=Ops",
+      "--tracker-project=Launch",
+      "--code-intelligence=gitnexus-wrapper",
+      "--browser=none",
+    ],
+    skillDir,
+  );
 
   const config = readConfig(target);
   assert(config.tracker.provider === "linear", "linear fixture tracker should be linear");
   assert(config.tracker.team === "Ops", "linear fixture team missing");
   assert(config.codeIntelligence.provider === "gitnexus-wrapper", "wrapper fixture provider mismatch");
   assert(config.codeIntelligence.wrapperFallback.enabled === true, "wrapper fallback should be enabled");
-  assert(config.codeIntelligence.availability.fallbackCommandReadiness === "configured", "wrapper readiness should be configured");
+  assert(
+    config.codeIntelligence.availability.fallbackCommandReadiness === "configured",
+    "wrapper readiness should be configured",
+  );
   assert(config.codeIntelligence.freshnessGate.enabled === true, "wrapper fixture should enable freshness gate");
 }
 
 function testGitNexusFreshnessGate(root) {
   const target = makeTarget(root, "linear-gitnexus-wrapper", "gitnexus-freshness-gate");
   const skillDir = join(root, "skills-freshness");
-  initHarness(target, [
-    "--config-mode=custom",
-    "--tracker=none",
-    "--code-intelligence=gitnexus-wrapper",
-    "--browser=none",
-  ], skillDir);
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=gitnexus-wrapper", "--browser=none"],
+    skillDir,
+  );
 
   assert(git(target, ["init"]).status === 0, "git init failed");
   assert(git(target, ["add", "."]).status === 0, "git add failed");
   assert(
-    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"])
+      .status === 0,
     "git commit failed",
   );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "new",
-    "--config=apex.workflow.json",
-    "--slug=freshness-slice",
-    "--issue=none",
-    "--mode=route-local",
-    "--surface=product doc",
-    "--files=PRODUCT.md",
-    "--downshift=route-local: one product doc owner",
-    "--browser=skip: docs only",
-    "--typecheck=skip: fixture docs only",
-    "--required=node --version",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=freshness-slice",
+      "--issue=none",
+      "--mode=route-local",
+      "--surface=product doc",
+      "--files=PRODUCT.md",
+      "--downshift=route-local: one product doc owner",
+      "--browser=skip: docs only",
+      "--typecheck=skip: fixture docs only",
+      "--required=node --version",
+    ],
+    { cwd: target },
+  );
 
-  const missingGate = run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "close",
-    "--config=apex.workflow.json",
-    "--slug=freshness-slice",
-    "--next=none",
-  ], { cwd: target, allowFailure: true });
+  const missingGate = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "close",
+      "--config=apex.workflow.json",
+      "--slug=freshness-slice",
+      "--next=none",
+    ],
+    { cwd: target, allowFailure: true },
+  );
   assert(missingGate.status !== 0, "GitNexus close should fail without freshness records");
   assert(
     `${missingGate.stdout}\n${missingGate.stderr}`.includes("preSliceStatus is required"),
     "freshness gate should report missing preSliceStatus",
   );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "record-gitnexus-freshness",
-    "--config=apex.workflow.json",
-    "--slug=freshness-slice",
-    "--phase=pre-status",
-    "--status=fresh",
-    "--command=npm run gitnexus:status",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "record-gitnexus-freshness",
+      "--config=apex.workflow.json",
+      "--slug=freshness-slice",
+      "--phase=pre-status",
+      "--status=fresh",
+      "--command=npm run gitnexus:status",
+    ],
+    { cwd: target },
+  );
 
-  const missingPost = run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "finish",
-    "--config=apex.workflow.json",
-    "--slug=freshness-slice",
-    "--next=none",
-  ], { cwd: target, allowFailure: true });
+  const missingPost = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "finish",
+      "--config=apex.workflow.json",
+      "--slug=freshness-slice",
+      "--next=none",
+    ],
+    { cwd: target, allowFailure: true },
+  );
   assert(missingPost.status !== 0, "GitNexus finish should fail without post freshness disposition");
   assert(
     `${missingPost.stdout}\n${missingPost.stderr}`.includes("postSliceRefresh or postSliceSkipReason"),
     "freshness gate should report missing post-slice disposition",
   );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "record-gitnexus-freshness",
-    "--config=apex.workflow.json",
-    "--slug=freshness-slice",
-    "--phase=post-skip",
-    "--status=skipped",
-    "--reason=docs-only fixture slice",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "record-gitnexus-freshness",
+      "--config=apex.workflow.json",
+      "--slug=freshness-slice",
+      "--phase=post-skip",
+      "--status=skipped",
+      "--reason=docs-only fixture slice",
+    ],
+    { cwd: target },
+  );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "close",
-    "--config=apex.workflow.json",
-    "--slug=freshness-slice",
-    "--next=none",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "close",
+      "--config=apex.workflow.json",
+      "--slug=freshness-slice",
+      "--next=none",
+    ],
+    { cwd: target },
+  );
 
   const manifest = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/freshness-slice.json"), "utf8"));
   assert(manifest.codeIntelligence.freshness.preSliceStatus.status === "fresh", "preSliceStatus should be recorded");
@@ -510,45 +620,57 @@ function testGitNexusFreshnessGate(root) {
     "postSliceSkipReason should be recorded",
   );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "new",
-    "--config=apex.workflow.json",
-    "--slug=stale-slice",
-    "--issue=none",
-    "--mode=route-local",
-    "--surface=product doc",
-    "--files=PRODUCT.md",
-    "--downshift=route-local: one product doc owner",
-    "--browser=skip: docs only",
-    "--typecheck=skip: fixture docs only",
-    "--required=node --version",
-  ], { cwd: target });
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "record-gitnexus-freshness",
-    "--config=apex.workflow.json",
-    "--slug=stale-slice",
-    "--phase=pre-status",
-    "--status=stale",
-    "--command=npm run gitnexus:status",
-  ], { cwd: target });
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "record-gitnexus-freshness",
-    "--config=apex.workflow.json",
-    "--slug=stale-slice",
-    "--phase=post-skip",
-    "--status=skipped",
-    "--reason=fixture no follow-up graph work",
-  ], { cwd: target });
-  const missingRefresh = run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "finish",
-    "--config=apex.workflow.json",
-    "--slug=stale-slice",
-    "--next=none",
-  ], { cwd: target, allowFailure: true });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=stale-slice",
+      "--issue=none",
+      "--mode=route-local",
+      "--surface=product doc",
+      "--files=PRODUCT.md",
+      "--downshift=route-local: one product doc owner",
+      "--browser=skip: docs only",
+      "--typecheck=skip: fixture docs only",
+      "--required=node --version",
+    ],
+    { cwd: target },
+  );
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "record-gitnexus-freshness",
+      "--config=apex.workflow.json",
+      "--slug=stale-slice",
+      "--phase=pre-status",
+      "--status=stale",
+      "--command=npm run gitnexus:status",
+    ],
+    { cwd: target },
+  );
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "record-gitnexus-freshness",
+      "--config=apex.workflow.json",
+      "--slug=stale-slice",
+      "--phase=post-skip",
+      "--status=skipped",
+      "--reason=fixture no follow-up graph work",
+    ],
+    { cwd: target },
+  );
+  const missingRefresh = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "finish",
+      "--config=apex.workflow.json",
+      "--slug=stale-slice",
+      "--next=none",
+    ],
+    { cwd: target, allowFailure: true },
+  );
   assert(missingRefresh.status !== 0, "stale preSliceStatus should require preSliceRefresh");
   assert(
     `${missingRefresh.stdout}\n${missingRefresh.stderr}`.includes("preSliceRefresh is required"),
@@ -559,7 +681,11 @@ function testGitNexusFreshnessGate(root) {
 function testGitNexusMcpPreferred(root) {
   const target = makeTarget(root, "gitnexus-mcp-preferred");
   const skillDir = join(root, "skills");
-  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=gitnexus-mcp", "--browser=none"], skillDir);
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=gitnexus-mcp", "--browser=none"],
+    skillDir,
+  );
 
   const config = readConfig(target);
   assert(config.codeIntelligence.provider === "gitnexus-mcp", "MCP fixture provider mismatch");
@@ -573,25 +699,35 @@ function testGitNexusMcpPreferred(root) {
 function testExistingAgentsManagedBlock(root) {
   const target = makeTarget(root, "existing-agents-managed");
   const skillDir = join(root, "skills");
-  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"], skillDir);
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
 
   const agents = readFileSync(join(target, "AGENTS.md"), "utf8");
   assert(!agents.includes("old managed content"), "old managed block content should be replaced");
   assert((agents.match(/<!-- apex-workflow:start -->/g) ?? []).length === 1, "managed block should not duplicate");
   assert(agents.includes("Keep this repo-specific instruction."), "non-managed AGENTS content should be preserved");
 
-  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none", "--force"], skillDir);
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none", "--force"],
+    skillDir,
+  );
   const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
-  assert((gitignore.match(/# apex-workflow:start/g) ?? []).length === 1, ".gitignore managed block should not duplicate");
+  assert(
+    (gitignore.match(/# apex-workflow:start/g) ?? []).length === 1,
+    ".gitignore managed block should not duplicate",
+  );
 }
 
 function testPathCasingMismatch(root) {
   const target = makeTarget(root, "path-casing-mismatch");
-  const result = run([
-    join(APEX_ROOT, "scripts/check-config.mjs"),
-    "--config=apex.workflow.json",
-    `--target=${target}`,
-  ], { cwd: target, allowFailure: true });
+  const result = run(
+    [join(APEX_ROOT, "scripts/check-config.mjs"), "--config=apex.workflow.json", `--target=${target}`],
+    { cwd: target, allowFailure: true },
+  );
 
   assert(result.status !== 0, "path casing mismatch should fail config check");
   assert(
@@ -625,13 +761,16 @@ function testSchemaValidation(root) {
       2,
     ),
   );
-  const invalid = run([
-    join(APEX_ROOT, "scripts/check-config.mjs"),
-    `--config=${invalidConfig}`,
-    "--target=fixtures/config/service-desk",
-    "--allow-outside-config",
-    "--format=json",
-  ], { allowFailure: true });
+  const invalid = run(
+    [
+      join(APEX_ROOT, "scripts/check-config.mjs"),
+      `--config=${invalidConfig}`,
+      "--target=fixtures/config/service-desk",
+      "--allow-outside-config",
+      "--format=json",
+    ],
+    { allowFailure: true },
+  );
   assert(invalid.status !== 0, "schema-invalid profile should fail");
   const invalidJson = JSON.parse(invalid.stdout);
   assert(invalidJson.schema.ok === false, "schema-invalid profile should report schema failure");
@@ -645,19 +784,29 @@ function testSchemaValidation(root) {
 function testDryRunNoWrites(root) {
   const target = makeTarget(root, "dry-run-no-writes");
   const skillDir = join(root, "dry-run-skills");
-  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none", "--dry-run"], skillDir);
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none", "--dry-run"],
+    skillDir,
+  );
 
   assert(!existsSync(join(target, "apex.workflow.json")), "dry-run should not write apex.workflow.json");
   assert(!existsSync(join(target, "AGENTS.md")), "dry-run should not write AGENTS.md");
   assert(!existsSync(join(skillDir, "apex-workflow")), "dry-run should not create skill symlink");
-  assert(!readFileSync(join(target, ".gitignore"), "utf8").includes("# apex-workflow:start"), "dry-run should not update .gitignore");
+  assert(
+    !readFileSync(join(target, ".gitignore"), "utf8").includes("# apex-workflow:start"),
+    "dry-run should not update .gitignore",
+  );
 }
 
 function testCodebaseMapWorkflow(root) {
   const sparseTarget = join(root, "sparse-no-orientation");
   const sparseSkillDir = join(root, "skills-sparse-map");
   mkdirSync(sparseTarget, { recursive: true });
-  writeFileSync(join(sparseTarget, "package.json"), JSON.stringify({ name: "sparse-no-orientation", private: true }, null, 2));
+  writeFileSync(
+    join(sparseTarget, "package.json"),
+    JSON.stringify({ name: "sparse-no-orientation", private: true }, null, 2),
+  );
   writeFileSync(join(sparseTarget, ".gitignore"), "tmp/\n");
   const sparseInstall = initHarness(
     sparseTarget,
@@ -673,13 +822,17 @@ function testCodebaseMapWorkflow(root) {
   const skillDir = join(root, "skills-codebase-map");
   writeFileSync(join(target, ".env.local"), "SECRET_SHOULD_NOT_APPEAR=fixture-secret\n");
   writeFileSync(join(target, "private.key"), "fixture-private-key\n");
-  initHarness(target, [
-    "--config-mode=custom",
-    "--tracker=none",
-    "--code-intelligence=focused-search",
-    "--browser=none",
-    "--create-codebase-map",
-  ], skillDir);
+  initHarness(
+    target,
+    [
+      "--config-mode=custom",
+      "--tracker=none",
+      "--code-intelligence=focused-search",
+      "--browser=none",
+      "--create-codebase-map",
+    ],
+    skillDir,
+  );
 
   const mapPath = join(target, "docs/CODEBASE_MAP.md");
   assert(existsSync(mapPath), "create-codebase-map should write docs/CODEBASE_MAP.md");
@@ -689,7 +842,10 @@ function testCodebaseMapWorkflow(root) {
   assert(!mapText.includes("fixture-private-key"), "generated map should not read key content");
 
   let config = readConfig(target);
-  assert(config.orientation.readBeforeBroadSearch.includes("docs/CODEBASE_MAP.md"), "profile should point at generated map");
+  assert(
+    config.orientation.readBeforeBroadSearch.includes("docs/CODEBASE_MAP.md"),
+    "profile should point at generated map",
+  );
   assert(
     config.setup.reviewNeeded.some((item) => item.includes("Generated docs/CODEBASE_MAP.md is draft")),
     "profile should retain draft map review item",
@@ -706,75 +862,71 @@ function testCodebaseMapWorkflow(root) {
   assert(draftJson.status === "draft", "draft map should report draft status");
   assert(draftJson.reviewMarkers.length > 0, "draft map should report review markers");
 
-  const blockedReview = run([
-    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
-    `--target=${target}`,
-    "--mark-reviewed",
-    "--check",
-  ], { allowFailure: true });
-  assert(blockedReview.status !== 0, "mark-reviewed should fail while review markers remain, even when --check is also passed");
+  const blockedReview = run(
+    [join(APEX_ROOT, "scripts/apex-map-codebase.mjs"), `--target=${target}`, "--mark-reviewed", "--check"],
+    { allowFailure: true },
+  );
+  assert(
+    blockedReview.status !== 0,
+    "mark-reviewed should fail while review markers remain, even when --check is also passed",
+  );
 
   stripReviewMarkers(mapPath);
-  run([
-    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
-    `--target=${target}`,
-    "--mark-reviewed",
-    "--sync-profile",
-  ]);
+  run([join(APEX_ROOT, "scripts/apex-map-codebase.mjs"), `--target=${target}`, "--mark-reviewed", "--sync-profile"]);
 
   config = readConfig(target);
   assert(
     !config.setup.reviewNeeded.some((item) => item.includes("Generated docs/CODEBASE_MAP.md is draft")),
     "sync-profile should remove only generated draft map review item",
   );
-  assert(config.setup.reviewRequiredBeforeFirstSlice === false, "sync-profile should recompute reviewRequiredBeforeFirstSlice");
+  assert(
+    config.setup.reviewRequiredBeforeFirstSlice === false,
+    "sync-profile should recompute reviewRequiredBeforeFirstSlice",
+  );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
-    `--target=${target}`,
-    "--check",
-    "--require-reviewed",
-  ]);
+  run([join(APEX_ROOT, "scripts/apex-map-codebase.mjs"), `--target=${target}`, "--check", "--require-reviewed"]);
 
   assert(git(target, ["init"]).status === 0, "git init failed");
   assert(git(target, ["add", "."]).status === 0, "git add failed");
   assert(
-    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"])
+      .status === 0,
     "git commit failed",
   );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-doctor.mjs"),
-    `--target=${target}`,
-    `--skill-dir=${skillDir}`,
-    "--skip-commands",
-  ]);
+  run([join(APEX_ROOT, "scripts/apex-doctor.mjs"), `--target=${target}`, `--skill-dir=${skillDir}`, "--skip-commands"]);
 
   const legacyTarget = makeTarget(root, "codebase-map-target", "legacy-map-target");
   mkdirSync(join(legacyTarget, "docs"), { recursive: true });
-  writeFileSync(
-    join(legacyTarget, "docs/CODEBASE_MAP.md"),
-    "# Codebase Map\n\n## High-Level Layout\n\nLegacy only.\n",
+  writeFileSync(join(legacyTarget, "docs/CODEBASE_MAP.md"), "# Codebase Map\n\n## High-Level Layout\n\nLegacy only.\n");
+  const legacy = run(
+    [
+      join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
+      `--target=${legacyTarget}`,
+      "--check",
+      "--require-reviewed",
+      "--format=json",
+    ],
+    { allowFailure: true },
   );
-  const legacy = run([
-    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
-    `--target=${legacyTarget}`,
-    "--check",
-    "--require-reviewed",
-    "--format=json",
-  ], { allowFailure: true });
   assert(legacy.status !== 0, "legacy map should fail require-reviewed");
   assert(JSON.parse(legacy.stdout).status === "legacy", "legacy map should report legacy status");
 
   const invalidNoMarkers = join(root, "invalid-no-markers");
   mkdirSync(join(invalidNoMarkers, "docs"), { recursive: true });
-  writeFileSync(join(invalidNoMarkers, "docs/CODEBASE_MAP.md"), "# Codebase Map\n\nStatus: draft\n\n## High-Level Layout\n\nOnly one section.\n");
-  const invalidReview = run([
-    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
-    `--target=${invalidNoMarkers}`,
-    "--mark-reviewed",
-    "--format=json",
-  ], { allowFailure: true });
+  writeFileSync(
+    join(invalidNoMarkers, "docs/CODEBASE_MAP.md"),
+    "# Codebase Map\n\nStatus: draft\n\n## High-Level Layout\n\nOnly one section.\n",
+  );
+  const invalidReview = run(
+    [
+      join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
+      `--target=${invalidNoMarkers}`,
+      "--mark-reviewed",
+      "--format=json",
+    ],
+    { allowFailure: true },
+  );
   assert(invalidReview.status !== 0, "mark-reviewed should fail on structurally incomplete maps");
   assert(
     !readFileSync(join(invalidNoMarkers, "docs/CODEBASE_MAP.md"), "utf8").includes("Status: reviewed"),
@@ -785,13 +937,17 @@ function testCodebaseMapWorkflow(root) {
   const existingSkillDir = join(root, "skills-existing-map");
   mkdirSync(join(existingMapTarget, "docs"), { recursive: true });
   writeFileSync(join(existingMapTarget, "docs/CODEBASE_MAP.md"), "# Codebase Map\n\nExisting human map.\n");
-  initHarness(existingMapTarget, [
-    "--config-mode=custom",
-    "--tracker=none",
-    "--code-intelligence=focused-search",
-    "--browser=none",
-    "--create-codebase-map",
-  ], existingSkillDir);
+  initHarness(
+    existingMapTarget,
+    [
+      "--config-mode=custom",
+      "--tracker=none",
+      "--code-intelligence=focused-search",
+      "--browser=none",
+      "--create-codebase-map",
+    ],
+    existingSkillDir,
+  );
   assert(
     readFileSync(join(existingMapTarget, "docs/CODEBASE_MAP.md"), "utf8").includes("Existing human map."),
     "create-codebase-map should not overwrite an existing map without force",
@@ -833,19 +989,29 @@ function testPortableCliEntrypoints(root) {
   assert(git(target, ["init"]).status === 0, "git init failed");
   assert(git(target, ["add", "."]).status === 0, "git add failed");
   assert(
-    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"])
+      .status === 0,
     "git commit failed",
   );
-  runCommand(apexDoctor, [`--target=${target}`, "--config=apex.workflow.json", `--skill-dir=${skillDir}`, "--skip-commands"]);
-  runCommand(apexManifest, [
-    "new",
+  runCommand(apexDoctor, [
+    `--target=${target}`,
     "--config=apex.workflow.json",
-    "--slug=portable-cli",
-    "--issue=none",
-    "--mode=planning",
-    "--surface=fixture docs",
-    "--downshift=planning: cli shim smoke test",
-  ], { cwd: target });
+    `--skill-dir=${skillDir}`,
+    "--skip-commands",
+  ]);
+  runCommand(
+    apexManifest,
+    [
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=portable-cli",
+      "--issue=none",
+      "--mode=planning",
+      "--surface=fixture docs",
+      "--downshift=planning: cli shim smoke test",
+    ],
+    { cwd: target },
+  );
   runCommand(apexMapCodebase, [`--target=${target}`, "--write", "--date=2026-04-29"]);
 }
 
@@ -857,8 +1023,14 @@ function testPortabilityScan() {
 function testTrustModelDocs() {
   assert(existsSync(join(APEX_ROOT, "SECURITY.md")), "SECURITY.md should document the trust model");
   const security = readFileSync(join(APEX_ROOT, "SECURITY.md"), "utf8");
-  assert(security.includes("trusted executable workflow configuration"), "SECURITY.md should name executable trust boundary");
-  assert(security.includes("Do not run Apex against untrusted profiles"), "SECURITY.md should warn about untrusted profiles");
+  assert(
+    security.includes("trusted executable workflow configuration"),
+    "SECURITY.md should name executable trust boundary",
+  );
+  assert(
+    security.includes("Do not run Apex against untrusted profiles"),
+    "SECURITY.md should warn about untrusted profiles",
+  );
   const readme = readFileSync(join(APEX_ROOT, "README.md"), "utf8");
   assert(readme.includes("[SECURITY.md](SECURITY.md)"), "README should link SECURITY.md");
   const skill = readFileSync(join(APEX_ROOT, "skills/apex-workflow/SKILL.md"), "utf8");
@@ -907,130 +1079,204 @@ function testControlPlaneHardening(root) {
   const target = makeTarget(root, "no-adapters", "control-plane-hardening");
   writeFileSync(join(target, "package-lock.json"), JSON.stringify({ name: "fixture", lockfileVersion: 3 }, null, 2));
   const skillDir = join(root, "skills-control-plane");
-  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"], skillDir);
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
 
-  const escapedManifest = run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "new",
-    "--config=apex.workflow.json",
-    "--file=../../outside.json",
-    "--issue=none",
-    "--mode=tiny",
-    "--surface=escape",
-    "--files=PRODUCT.md",
-    "--downshift=tiny: path escape fixture",
-    "--browser=skip",
-    "--typecheck=skip",
-    "--required=node --version",
-  ], { cwd: target, allowFailure: true });
+  const escapedManifest = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--file=../../outside.json",
+      "--issue=none",
+      "--mode=tiny",
+      "--surface=escape",
+      "--files=PRODUCT.md",
+      "--downshift=tiny: path escape fixture",
+      "--browser=skip",
+      "--typecheck=skip",
+      "--required=node --version",
+    ],
+    { cwd: target, allowFailure: true },
+  );
   assert(escapedManifest.status !== 0, "manifest path escape should fail");
-  assert(`${escapedManifest.stdout}\n${escapedManifest.stderr}`.includes("must stay inside target repo"), "path escape failure should be clear");
+  assert(
+    `${escapedManifest.stdout}\n${escapedManifest.stderr}`.includes("must stay inside target repo"),
+    "path escape failure should be clear",
+  );
 
-  const escapedMap = run([
-    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
-    `--target=${target}`,
-    "--output=../../outside.md",
-    "--write",
-  ], { allowFailure: true });
+  const escapedMap = run(
+    [join(APEX_ROOT, "scripts/apex-map-codebase.mjs"), `--target=${target}`, "--output=../../outside.md", "--write"],
+    { allowFailure: true },
+  );
   assert(escapedMap.status !== 0, "codebase map output escape should fail");
 
-  const outsideConfig = run([
-    join(APEX_ROOT, "scripts/check-config.mjs"),
-    "--config=../../outside.workflow.json",
-    `--target=${target}`,
-  ], { allowFailure: true });
+  const outsideConfig = run(
+    [join(APEX_ROOT, "scripts/check-config.mjs"), "--config=../../outside.workflow.json", `--target=${target}`],
+    { allowFailure: true },
+  );
   assert(outsideConfig.status !== 0, "outside config should fail without explicit allow flag");
 
   assert(git(target, ["init"]).status === 0, "git init failed");
   assert(git(target, ["add", "."]).status === 0, "git add failed");
   assert(
-    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"])
+      .status === 0,
     "git commit failed",
   );
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "new",
-    "--config=apex.workflow.json",
-    "--slug=hardening",
-    "--issue=none",
-    "--mode=tiny",
-    "--surface=product doc",
-    "--files=PRODUCT.md,package-lock.json",
-    "--downshift=tiny: control-plane fixture",
-    "--browser=skip: docs only",
-    "--typecheck=skip: docs only",
-    "--required=node --version",
-  ], { cwd: target });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--issue=none",
+      "--mode=tiny",
+      "--surface=product doc",
+      "--files=PRODUCT.md,package-lock.json",
+      "--downshift=tiny: control-plane fixture",
+      "--browser=skip: docs only",
+      "--typecheck=skip: docs only",
+      "--required=node --version",
+    ],
+    { cwd: target },
+  );
 
-  const timeout = run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "run-check",
-    "--config=apex.workflow.json",
-    "--slug=hardening",
-    "--timeout-ms=250",
-    "--cmd=node -e \"setTimeout(() => {}, 5000)\"",
-  ], { cwd: target, allowFailure: true });
+  const childMarker = join(target, "tmp/apex-workflow/timeout-child-alive.txt");
+  const timeoutScript = join(target, "tmp/apex-workflow/timeout-child.mjs");
+  mkdirSync(dirname(timeoutScript), { recursive: true });
+  writeFileSync(
+    timeoutScript,
+    [
+      "import { mkdirSync, writeFileSync } from 'node:fs';",
+      "import { dirname, join } from 'node:path';",
+      "const marker = join(process.cwd(), 'tmp/apex-workflow/timeout-child-alive.txt');",
+      "setTimeout(() => { mkdirSync(dirname(marker), { recursive: true }); writeFileSync(marker, 'alive'); }, 1500);",
+      "setTimeout(() => {}, 5000);",
+      "",
+    ].join("\n"),
+  );
+  const timeout = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--timeout-ms=250",
+      "--cmd=node tmp/apex-workflow/timeout-child.mjs",
+    ],
+    { cwd: target, allowFailure: true },
+  );
   assert(timeout.status !== 0, "hanging command should time out");
   assert(latestRun(target, "hardening").timedOut === true, "timed out run should be recorded");
+  waitMs(1800);
+  assert(!existsSync(childMarker), "timed out command should not leave child process running");
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "run-check",
-    "--config=apex.workflow.json",
-    "--slug=hardening",
-    "--cmd=node -e \"console.log('OPENAI_API_KEY=sk-fakefakefakefake'); console.error('Bearer ghp_fakefakefakefake')\"",
-  ], { cwd: target });
+  writeFileSync(join(target, "tmp/apex-workflow/big-output.mjs"), "process.stdout.write('x'.repeat(1200000));\n");
+  const capped = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--cmd=node tmp/apex-workflow/big-output.mjs",
+    ],
+    { cwd: target },
+  );
+  assert(capped.status === 0, "large-output command should still pass");
+  const cappedRun = latestRun(target, "hardening");
+  assert(cappedRun.outputTruncated === true, "large output should be marked truncated");
+  assert((cappedRun.stdout ?? "").length <= 4000, "recorded stdout should be capped to tail limit");
+
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--cmd=node -e \"console.log('OPENAI_API_KEY=sk-fakefakefakefake'); console.error('Bearer ghp_fakefakefakefake')\"",
+    ],
+    { cwd: target },
+  );
   const redactedRun = latestRun(target, "hardening");
   const redactedLog = readFileSync(join(target, redactedRun.logPath), "utf8");
   assert(!redactedLog.includes("sk-fakefakefakefake"), "OpenAI token should be redacted from log");
   assert(!redactedLog.includes("ghp_fakefakefakefake"), "GitHub token should be redacted from log");
   assert(!redactedRun.command.includes("sk-fakefakefakefake"), "token should be redacted from recorded command");
 
-  run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "run-check",
-    "--config=apex.workflow.json",
-    "--slug=hardening",
-    "--cmd=node --version",
-  ], { cwd: target });
-  writeFileSync(join(target, "package-lock.json"), JSON.stringify({ name: "fixture", lockfileVersion: 3, changed: true }, null, 2));
-  const stale = run([
-    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
-    "close",
-    "--config=apex.workflow.json",
-    "--slug=hardening",
-    "--skip-required",
-    "--next=none",
-  ], { cwd: target, allowFailure: true });
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--cmd=node --version",
+    ],
+    { cwd: target },
+  );
+  writeFileSync(
+    join(target, "package-lock.json"),
+    JSON.stringify({ name: "fixture", lockfileVersion: 3, changed: true }, null, 2),
+  );
+  const stale = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "close",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--skip-required",
+      "--next=none",
+    ],
+    { cwd: target, allowFailure: true },
+  );
   assert(stale.status !== 0, "package-lock change should stale required evidence");
-  assert(`${stale.stdout}\n${stale.stderr}`.includes("stale required evidence"), "stale evidence output should be clear");
+  assert(
+    `${stale.stdout}\n${stale.stderr}`.includes("stale required evidence"),
+    "stale evidence output should be clear",
+  );
 
   const rollbackTarget = join(root, "rollback-target");
   mkdirSync(rollbackTarget, { recursive: true });
-  writeFileSync(join(rollbackTarget, "package.json"), JSON.stringify({ name: "rollback-target", private: true }, null, 2));
+  writeFileSync(
+    join(rollbackTarget, "package.json"),
+    JSON.stringify({ name: "rollback-target", private: true }, null, 2),
+  );
   writeFileSync(join(rollbackTarget, "AGENTS.md"), "original agents\n");
-  const rollback = runCommand(process.execPath, [
-    join(APEX_ROOT, "scripts/init-harness.mjs"),
-    `--target=${rollbackTarget}`,
-    `--skill-dir=${join(root, "skills-rollback")}`,
-    "--config-mode=custom",
-    "--tracker=none",
-    "--code-intelligence=focused-search",
-    "--browser=none",
-    "--yes",
-  ], { env: { APEX_INIT_FAIL_AFTER_COMMIT: "1" }, allowFailure: true });
+  const rollback = runCommand(
+    process.execPath,
+    [
+      join(APEX_ROOT, "scripts/init-harness.mjs"),
+      `--target=${rollbackTarget}`,
+      `--skill-dir=${join(root, "skills-rollback")}`,
+      "--config-mode=custom",
+      "--tracker=none",
+      "--code-intelligence=focused-search",
+      "--browser=none",
+      "--yes",
+    ],
+    { env: { APEX_INIT_FAIL_AFTER_COMMIT: "1" }, allowFailure: true },
+  );
   assert(rollback.status !== 0, "forced late init failure should fail");
   assert(!existsSync(join(rollbackTarget, "apex.workflow.json")), "rollback should remove generated profile");
-  assert(readFileSync(join(rollbackTarget, "AGENTS.md"), "utf8") === "original agents\n", "rollback should restore AGENTS");
+  assert(
+    readFileSync(join(rollbackTarget, "AGENTS.md"), "utf8") === "original agents\n",
+    "rollback should restore AGENTS",
+  );
 
-  const doctor = run([
-    join(APEX_ROOT, "scripts/apex-doctor.mjs"),
-    `--target=${target}`,
-    `--skill-dir=${skillDir}`,
-    "--skip-commands",
-    "--json",
-  ], { allowFailure: true });
+  const doctor = run(
+    [
+      join(APEX_ROOT, "scripts/apex-doctor.mjs"),
+      `--target=${target}`,
+      `--skill-dir=${skillDir}`,
+      "--skip-commands",
+      "--json",
+    ],
+    { allowFailure: true },
+  );
   const doctorJson = JSON.parse(doctor.stdout);
   assert(Array.isArray(doctorJson.blockers), "doctor JSON should include blockers");
   assert(Array.isArray(doctorJson.warnings), "doctor JSON should include warnings");

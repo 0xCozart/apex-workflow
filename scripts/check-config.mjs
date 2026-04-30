@@ -172,7 +172,11 @@ function collectPathEntries(config) {
   }
 
   if (config.verification?.knownFailures) {
-    entries.push({ path: collectDocPath(config.verification.knownFailures), required: false, source: "verification.knownFailures" });
+    entries.push({
+      path: collectDocPath(config.verification.knownFailures),
+      required: false,
+      source: "verification.knownFailures",
+    });
   }
 
   for (const filePath of config.uiUx?.designSystemDocs ?? []) {
@@ -256,7 +260,8 @@ function validateConfig(config, options) {
   requireArray(contracts, "surrogates", failures);
 
   const verification = requireObject(config, "verification", failures);
-  if (typeof verification.focusedChecksFirst !== "boolean") failures.push("verification.focusedChecksFirst must be boolean");
+  if (typeof verification.focusedChecksFirst !== "boolean")
+    failures.push("verification.focusedChecksFirst must be boolean");
   requireArray(verification, "requiredCommands", failures);
   requireArray(verification, "optionalCommands", failures);
   const browser = requireObject(verification, "browser", failures);
@@ -307,7 +312,9 @@ function main() {
   const targetRoot = args.target ? resolve(process.cwd(), String(args.target)) : process.cwd();
   let configPath;
   try {
-    const rawConfigPath = Boolean(args["allow-outside-config"]) ? resolve(process.cwd(), String(args.config)) : args.config;
+    const rawConfigPath = Boolean(args["allow-outside-config"])
+      ? resolve(process.cwd(), String(args.config))
+      : args.config;
     configPath = resolveInsideRoot(targetRoot, rawConfigPath, {
       label: "config path",
       file: true,

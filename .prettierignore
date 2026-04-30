@@ -1,0 +1,10 @@
+.git
+.github/actions-cache
+node_modules
+tmp
+dist
+build
+coverage
+.next
+.turbo
+.cache

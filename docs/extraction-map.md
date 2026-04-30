@@ -18,8 +18,7 @@ Extracted from `minty-exec` and `docs/runbooks/minty-execution-os.md`:
 
 ## Routing And Contracts
 
-Extracted from `minty-contract-routing`, `surface-first`, and
-`contract-bridge`:
+Extracted from `minty-contract-routing`, `surface-first`, and `contract-bridge`:
 
 - owning surface first
 - contract docs before code

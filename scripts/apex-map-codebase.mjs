@@ -1,14 +1,6 @@
 #!/usr/bin/env node
 
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
@@ -24,23 +16,8 @@ import {
 } from "./lib/codebase-map.mjs";
 import { resolveInsideRoot } from "./lib/paths.mjs";
 
-const IGNORED_DIRS = new Set([
-  ".cache",
-  ".git",
-  ".next",
-  ".turbo",
-  "build",
-  "coverage",
-  "dist",
-  "node_modules",
-  "tmp",
-]);
-const SECRET_FILE_PATTERNS = [
-  /^\.env(?:\.|$)/,
-  /^id_(?:rsa|ed25519)$/,
-  /\.key$/i,
-  /\.pem$/i,
-];
+const IGNORED_DIRS = new Set([".cache", ".git", ".next", ".turbo", "build", "coverage", "dist", "node_modules", "tmp"]);
+const SECRET_FILE_PATTERNS = [/^\.env(?:\.|$)/, /^id_(?:rsa|ed25519)$/, /\.key$/i, /\.pem$/i];
 const MAX_TEXT_FILE_BYTES = 200_000;
 const DOC_SCAN_DEPTH = 3;
 const ROUTE_ROOT_CANDIDATES = ["src/app", "app", "pages", "src/pages", "routes", "src/routes", "src/app/api"];
@@ -115,7 +92,9 @@ function isProbablyBinaryOrLarge(filePath) {
 }
 
 function actualRelativePath(targetRoot, candidate) {
-  const parts = String(candidate).split(/[\\/]+/).filter(Boolean);
+  const parts = String(candidate)
+    .split(/[\\/]+/)
+    .filter(Boolean);
   let current = targetRoot;
   const actualParts = [];
 
@@ -232,7 +211,8 @@ function bulletList(items, fallback = "- none detected") {
 }
 
 function scriptLine(pkgManager, scriptName) {
-  const prefix = pkgManager === "yarn" ? "yarn" : pkgManager === "pnpm" ? "pnpm" : pkgManager === "bun" ? "bun run" : "npm run";
+  const prefix =
+    pkgManager === "yarn" ? "yarn" : pkgManager === "pnpm" ? "pnpm" : pkgManager === "bun" ? "bun run" : "npm run";
   if (pkgManager === "yarn") return `yarn ${scriptName}`;
   return `${prefix} ${scriptName}`;
 }
@@ -240,9 +220,17 @@ function scriptLine(pkgManager, scriptName) {
 function renderCodebaseMap(evidence, options = {}) {
   const date = options.date ?? new Date().toISOString().slice(0, 10);
   const sourceGitHead = gitHead(evidence.targetRoot) ?? "unavailable";
-  const verificationScripts = ["test", "typecheck", "lint", "build", "dev"].filter((scriptName) => evidence.scripts.includes(scriptName));
-  const routeRoots = evidence.routeRoots.length > 0 ? evidence.routeRoots : ["REVIEW NEEDED: confirm route or command entry points for this repo."];
-  const sourceRoots = evidence.sourceRoots.length > 0 ? evidence.sourceRoots : ["REVIEW NEEDED: confirm primary source roots for this repo."];
+  const verificationScripts = ["test", "typecheck", "lint", "build", "dev"].filter((scriptName) =>
+    evidence.scripts.includes(scriptName),
+  );
+  const routeRoots =
+    evidence.routeRoots.length > 0
+      ? evidence.routeRoots
+      : ["REVIEW NEEDED: confirm route or command entry points for this repo."];
+  const sourceRoots =
+    evidence.sourceRoots.length > 0
+      ? evidence.sourceRoots
+      : ["REVIEW NEEDED: confirm primary source roots for this repo."];
   const architectureDocs = evidence.docs.filter((doc) =>
     /(^|\/)(README|AGENTS|CLAUDE|ARCHITECTURE|architecture|PRODUCT|PRD|product|prd)(\.|$)/.test(doc),
   );
@@ -420,12 +408,16 @@ function writeMap({ targetRoot, outputPath, configPath, args }) {
   let destination = outputPath;
   if (existsSync(outputPath) && !args.force) {
     if (!args.refresh) {
-      throw new Error(`codebase map already exists: ${relativeToTarget(targetRoot, outputPath)}. Pass --force or --refresh.`);
+      throw new Error(
+        `codebase map already exists: ${relativeToTarget(targetRoot, outputPath)}. Pass --force or --refresh.`,
+      );
     }
     const parsed = outputPath.match(/^(.*?)(\.[^./\\]+)?$/);
     destination = `${parsed?.[1] ?? outputPath}.draft${parsed?.[2] ?? ".md"}`;
     if (existsSync(destination)) {
-      throw new Error(`draft refresh already exists: ${relativeToTarget(targetRoot, destination)}. Pass --force to replace it.`);
+      throw new Error(
+        `draft refresh already exists: ${relativeToTarget(targetRoot, destination)}. Pass --force to replace it.`,
+      );
     }
   }
 
@@ -439,7 +431,10 @@ function writeMap({ targetRoot, outputPath, configPath, args }) {
     status: "draft",
     output: destination,
     errors: [],
-    warnings: destination === outputPath ? ["draft map written; review before treating as authority"] : ["draft refresh written to sibling file"],
+    warnings:
+      destination === outputPath
+        ? ["draft map written; review before treating as authority"]
+        : ["draft refresh written to sibling file"],
     reviewMarkers: findReviewMarkers(content),
     profileUpdated: false,
   };
