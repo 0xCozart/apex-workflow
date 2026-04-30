@@ -37,6 +37,27 @@ The installer will:
 - print a post-install report with inferred path confidence, adapter choices, repo dirty state, and next checkpoint guidance
 - symlink the local `apex-workflow` skill unless `--skip-skill-link` is passed
 
+If the target has no broad-search orientation doc, create a draft codebase map:
+
+```bash
+apex-map-codebase --target=/path/to/app --write
+```
+
+Or create the draft during install:
+
+```bash
+apex-init --target=/path/to/app --create-codebase-map --yes
+```
+
+Generated maps are scaffolds. Review `docs/CODEBASE_MAP.md`, resolve every
+`REVIEW NEEDED` marker, then run:
+
+```bash
+cd /path/to/app
+apex-map-codebase --target=. --mark-reviewed --sync-profile
+apex-map-codebase --target=. --check --require-reviewed
+```
+
 Run the doctor before the first implementation slice:
 
 ```bash
@@ -77,6 +98,11 @@ Review `codeIntelligence.availability` separately from `provider`:
 
 If the installer could not infer product truth, contract docs, or broad-search
 orientation, it records that in `setup.reviewNeeded`.
+
+If the installer generated a codebase map, it also records a draft-map review
+item in `setup.reviewNeeded`. `apex-map-codebase --mark-reviewed --sync-profile`
+removes only that generated-map item after the map is reviewed; unrelated setup
+concerns remain.
 
 The validator checks required profile paths against the target repo and rejects
 case mismatches such as `docs/ARCHITECTURE.md` when the real file is
@@ -168,7 +194,7 @@ the skill.
 The smallest good adoption has:
 
 - one authority chain
-- one orientation doc
+- one reviewed orientation doc, or a draft `docs/CODEBASE_MAP.md` that is treated only as a scaffold until reviewed
 - one tracker policy
 - one verification command
 - one browser or explicit browser-skip policy

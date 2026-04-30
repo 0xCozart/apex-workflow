@@ -6,6 +6,11 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
+import {
+  DEFAULT_CODEBASE_MAP_PATH,
+  GENERATED_MAP_DRAFT_REVIEW_ITEM,
+  evaluateCodebaseMap,
+} from "./lib/codebase-map.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const APEX_ROOT = resolve(SCRIPT_DIR, "..");
@@ -237,6 +242,63 @@ function checkBaseline(checks, targetRoot) {
   else add(checks, "fail", "baseline checkpoint", `setup files are uncommitted: ${lines.join("; ")}`);
 }
 
+function codebaseMapRefs(config) {
+  return [
+    ...(config.orientation?.readBeforeBroadSearch ?? []),
+    ...(config.authority?.workflowRules ?? []),
+  ]
+    .map((entry) => (typeof entry === "string" ? entry.split("#")[0].trim() : ""))
+    .filter((entry) => entry === DEFAULT_CODEBASE_MAP_PATH || /(^|\/)CODEBASE_MAP\.md$/i.test(entry));
+}
+
+function readMapEvaluation(targetRoot, config) {
+  const refs = codebaseMapRefs(config);
+  if (refs.length === 0) return null;
+  const mapPath = join(targetRoot, refs[0]);
+  if (!existsSync(mapPath)) {
+    return {
+      refs,
+      exists: false,
+      reviewed: false,
+      detail: `configured codebase map is missing: ${refs[0]}`,
+    };
+  }
+  const text = readText(mapPath);
+  const evaluation = evaluateCodebaseMap(text);
+  return {
+    refs,
+    exists: true,
+    reviewed: evaluation.status === "reviewed" && evaluation.errors.length === 0 && evaluation.reviewMarkers.length === 0,
+    evaluation,
+  };
+}
+
+function checkCodebaseMap(checks, targetRoot, config, mapEvaluation) {
+  if (!mapEvaluation) {
+    add(checks, "pass", "codebase map", "no docs/CODEBASE_MAP.md reference configured");
+    return;
+  }
+
+  if (!mapEvaluation.exists) {
+    add(checks, "fail", "codebase map", mapEvaluation.detail);
+    return;
+  }
+
+  const evaluation = mapEvaluation.evaluation;
+  if (evaluation.status === "reviewed" && evaluation.errors.length === 0 && evaluation.reviewMarkers.length === 0) {
+    add(checks, "pass", "codebase map", "reviewed codebase map is ready");
+    return;
+  }
+
+  const details = [
+    `status=${evaluation.status}`,
+    ...evaluation.errors,
+    ...evaluation.warnings,
+    ...(evaluation.reviewMarkers.length > 0 ? [`review markers=${evaluation.reviewMarkers.length}`] : []),
+  ];
+  add(checks, "warn", "codebase map", details.join("; "));
+}
+
 function runConfigCheck(checks, configPath, targetRoot) {
   const result = spawnSync(process.execPath, [join(APEX_ROOT, "scripts/check-config.mjs"), `--config=${configPath}`, `--target=${targetRoot}`], {
     cwd: targetRoot,
@@ -258,10 +320,24 @@ function main() {
   const config = readJson(configPath);
   runConfigCheck(checks, configPath, targetRoot);
   checkTrustBoundary(checks, config);
+  const mapEvaluation = readMapEvaluation(targetRoot, config);
 
   const reviewNeeded = config.setup?.reviewNeeded ?? [];
-  if (reviewNeeded.length === 0) add(checks, "pass", "setup.reviewNeeded", "no unresolved installer review items");
-  else add(checks, "fail", "setup.reviewNeeded", reviewNeeded.join("; "));
+  const generatedMapReviewResolved =
+    reviewNeeded.includes(GENERATED_MAP_DRAFT_REVIEW_ITEM) && mapEvaluation?.reviewed;
+  const activeReviewNeeded = generatedMapReviewResolved
+    ? reviewNeeded.filter((item) => item !== GENERATED_MAP_DRAFT_REVIEW_ITEM)
+    : reviewNeeded;
+  if (activeReviewNeeded.length === 0) add(checks, "pass", "setup.reviewNeeded", "no unresolved installer review items");
+  else add(checks, "fail", "setup.reviewNeeded", activeReviewNeeded.join("; "));
+  if (generatedMapReviewResolved) {
+    add(
+      checks,
+      "warn",
+      "setup.reviewNeeded codebase map sync",
+      "reviewed map still has stale setup review item; run apex-map-codebase --target=. --mark-reviewed --sync-profile",
+    );
+  }
 
   const guessedPaths = collectGuessedPaths(config.setup?.inferredPaths);
   if (guessedPaths.length === 0) add(checks, "pass", "setup.inferredPaths", "no guessed paths remain");
@@ -283,6 +359,7 @@ function main() {
   checkTracker(checks, config, targetRoot, args);
   checkCodeIntelligence(checks, config, targetRoot, args);
   checkBrowser(checks, config, targetRoot, args);
+  checkCodebaseMap(checks, targetRoot, config, mapEvaluation);
   checkSkillLink(checks, config, args);
   checkBaseline(checks, targetRoot);
 

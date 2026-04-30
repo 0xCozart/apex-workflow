@@ -62,6 +62,15 @@ function readConfig(target) {
   return JSON.parse(readFileSync(join(target, "apex.workflow.json"), "utf8"));
 }
 
+function stripReviewMarkers(filePath) {
+  writeFileSync(
+    filePath,
+    readFileSync(filePath, "utf8")
+      .replace(/REVIEW NEEDED:\s*/g, "")
+      .replace(/REVIEW NEEDED/g, ""),
+  );
+}
+
 function initHarness(target, args, skillDir) {
   return run([
     join(APEX_ROOT, "scripts/init-harness.mjs"),
@@ -617,6 +626,151 @@ function testDryRunNoWrites(root) {
   assert(!readFileSync(join(target, ".gitignore"), "utf8").includes("# apex-workflow:start"), "dry-run should not update .gitignore");
 }
 
+function testCodebaseMapWorkflow(root) {
+  const sparseTarget = join(root, "sparse-no-orientation");
+  const sparseSkillDir = join(root, "skills-sparse-map");
+  mkdirSync(sparseTarget, { recursive: true });
+  writeFileSync(join(sparseTarget, "package.json"), JSON.stringify({ name: "sparse-no-orientation", private: true }, null, 2));
+  writeFileSync(join(sparseTarget, ".gitignore"), "tmp/\n");
+  const sparseInstall = initHarness(
+    sparseTarget,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    sparseSkillDir,
+  );
+  assert(
+    sparseInstall.stdout.includes("apex-map-codebase --target=. --write"),
+    "missing orientation install report should recommend apex-map-codebase",
+  );
+
+  const target = makeTarget(root, "codebase-map-target");
+  const skillDir = join(root, "skills-codebase-map");
+  writeFileSync(join(target, ".env.local"), "SECRET_SHOULD_NOT_APPEAR=fixture-secret\n");
+  writeFileSync(join(target, "private.key"), "fixture-private-key\n");
+  initHarness(target, [
+    "--config-mode=custom",
+    "--tracker=none",
+    "--code-intelligence=focused-search",
+    "--browser=none",
+    "--create-codebase-map",
+  ], skillDir);
+
+  const mapPath = join(target, "docs/CODEBASE_MAP.md");
+  assert(existsSync(mapPath), "create-codebase-map should write docs/CODEBASE_MAP.md");
+  const mapText = readFileSync(mapPath, "utf8");
+  assert(mapText.includes("Status: draft"), "generated map should start as draft");
+  assert(!mapText.includes("SECRET_SHOULD_NOT_APPEAR"), "generated map should not read .env content");
+  assert(!mapText.includes("fixture-private-key"), "generated map should not read key content");
+
+  let config = readConfig(target);
+  assert(config.orientation.readBeforeBroadSearch.includes("docs/CODEBASE_MAP.md"), "profile should point at generated map");
+  assert(
+    config.setup.reviewNeeded.some((item) => item.includes("Generated docs/CODEBASE_MAP.md is draft")),
+    "profile should retain draft map review item",
+  );
+
+  const draftCheck = run([
+    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
+    `--target=${target}`,
+    "--check",
+    "--format=json",
+  ]);
+  const draftJson = JSON.parse(draftCheck.stdout);
+  assert(draftJson.ok === true, "draft map should pass structural check");
+  assert(draftJson.status === "draft", "draft map should report draft status");
+  assert(draftJson.reviewMarkers.length > 0, "draft map should report review markers");
+
+  const blockedReview = run([
+    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
+    `--target=${target}`,
+    "--mark-reviewed",
+    "--check",
+  ], { allowFailure: true });
+  assert(blockedReview.status !== 0, "mark-reviewed should fail while review markers remain, even when --check is also passed");
+
+  stripReviewMarkers(mapPath);
+  run([
+    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
+    `--target=${target}`,
+    "--mark-reviewed",
+    "--sync-profile",
+  ]);
+
+  config = readConfig(target);
+  assert(
+    !config.setup.reviewNeeded.some((item) => item.includes("Generated docs/CODEBASE_MAP.md is draft")),
+    "sync-profile should remove only generated draft map review item",
+  );
+  assert(config.setup.reviewRequiredBeforeFirstSlice === false, "sync-profile should recompute reviewRequiredBeforeFirstSlice");
+
+  run([
+    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
+    `--target=${target}`,
+    "--check",
+    "--require-reviewed",
+  ]);
+
+  assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["add", "."]).status === 0, "git add failed");
+  assert(
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    "git commit failed",
+  );
+
+  run([
+    join(APEX_ROOT, "scripts/apex-doctor.mjs"),
+    `--target=${target}`,
+    `--skill-dir=${skillDir}`,
+    "--skip-commands",
+  ]);
+
+  const legacyTarget = makeTarget(root, "codebase-map-target", "legacy-map-target");
+  mkdirSync(join(legacyTarget, "docs"), { recursive: true });
+  writeFileSync(
+    join(legacyTarget, "docs/CODEBASE_MAP.md"),
+    "# Codebase Map\n\n## High-Level Layout\n\nLegacy only.\n",
+  );
+  const legacy = run([
+    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
+    `--target=${legacyTarget}`,
+    "--check",
+    "--require-reviewed",
+    "--format=json",
+  ], { allowFailure: true });
+  assert(legacy.status !== 0, "legacy map should fail require-reviewed");
+  assert(JSON.parse(legacy.stdout).status === "legacy", "legacy map should report legacy status");
+
+  const invalidNoMarkers = join(root, "invalid-no-markers");
+  mkdirSync(join(invalidNoMarkers, "docs"), { recursive: true });
+  writeFileSync(join(invalidNoMarkers, "docs/CODEBASE_MAP.md"), "# Codebase Map\n\nStatus: draft\n\n## High-Level Layout\n\nOnly one section.\n");
+  const invalidReview = run([
+    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
+    `--target=${invalidNoMarkers}`,
+    "--mark-reviewed",
+    "--format=json",
+  ], { allowFailure: true });
+  assert(invalidReview.status !== 0, "mark-reviewed should fail on structurally incomplete maps");
+  assert(
+    !readFileSync(join(invalidNoMarkers, "docs/CODEBASE_MAP.md"), "utf8").includes("Status: reviewed"),
+    "failed mark-reviewed should not rewrite status",
+  );
+
+  const existingMapTarget = makeTarget(root, "codebase-map-target", "existing-map-target");
+  const existingSkillDir = join(root, "skills-existing-map");
+  mkdirSync(join(existingMapTarget, "docs"), { recursive: true });
+  writeFileSync(join(existingMapTarget, "docs/CODEBASE_MAP.md"), "# Codebase Map\n\nExisting human map.\n");
+  initHarness(existingMapTarget, [
+    "--config-mode=custom",
+    "--tracker=none",
+    "--code-intelligence=focused-search",
+    "--browser=none",
+    "--create-codebase-map",
+  ], existingSkillDir);
+  assert(
+    readFileSync(join(existingMapTarget, "docs/CODEBASE_MAP.md"), "utf8").includes("Existing human map."),
+    "create-codebase-map should not overwrite an existing map without force",
+  );
+}
+
 function testPortableCliEntrypoints(root) {
   const packRoot = join(root, "pack");
   const installRoot = join(root, "cli-install");
@@ -636,6 +790,7 @@ function testPortableCliEntrypoints(root) {
   const apexDoctor = join(binDir, "apex-doctor");
   const apexManifest = join(binDir, "apex-manifest");
   const apexCheckConfig = join(binDir, "apex-check-config");
+  const apexMapCodebase = join(binDir, "apex-map-codebase");
 
   runCommand(apexInit, [
     `--target=${target}`,
@@ -664,6 +819,7 @@ function testPortableCliEntrypoints(root) {
     "--surface=fixture docs",
     "--downshift=planning: cli shim smoke test",
   ], { cwd: target });
+  runCommand(apexMapCodebase, [`--target=${target}`, "--write", "--date=2026-04-29"]);
 }
 
 function testPortabilityScan() {
@@ -698,6 +854,7 @@ function main() {
     testSchemaValidation(root);
     testPathCasingMismatch(root);
     testDryRunNoWrites(root);
+    testCodebaseMapWorkflow(root);
     testPortableCliEntrypoints(root);
     testPortabilityScan();
     testTrustModelDocs();

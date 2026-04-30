@@ -1,0 +1,12 @@
+{
+  "name": "codebase-map-target",
+  "private": true,
+  "scripts": {
+    "test": "node --version",
+    "typecheck": "node --version"
+  },
+  "dependencies": {
+    "next": "16.0.0",
+    "react": "19.0.0"
+  }
+}

@@ -17,8 +17,8 @@ npm run self-check
 npm link
 ```
 
-This makes `apex-init`, `apex-doctor`, `apex-manifest`, and
-`apex-check-config` available for local target repos.
+This makes `apex-init`, `apex-map-codebase`, `apex-doctor`,
+`apex-manifest`, and `apex-check-config` available for local target repos.
 
 ## 3. Create A Demo Target
 
@@ -53,6 +53,16 @@ apex-init \
   --browser=none \
   --yes
 ```
+
+Optional: create a draft orientation map when a target repo does not already
+have one:
+
+```bash
+apex-map-codebase --target=. --write
+```
+
+Generated maps start as `Status: draft`. Review the file and remove all
+`REVIEW NEEDED` markers before marking it reviewed.
 
 Commit the generated setup before the first slice:
 

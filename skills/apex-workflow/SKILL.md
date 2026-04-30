@@ -28,6 +28,16 @@ first. Do not store secrets in profiles, manifests, logs, or finish packets.
 2. Read the profile's `orientation.readFirst`.
 3. Read `orientation.readBeforeBroadSearch` before broad code search or routing.
 4. Read sectioned docs only when their trigger applies.
+5. If no broad-search orientation doc exists, recommend creating a draft map:
+
+```bash
+apex-map-codebase --target=. --write
+```
+
+Draft maps are scaffolds, not authority. Treat `docs/CODEBASE_MAP.md` as a
+reviewed orientation authority only when it has `Status: reviewed`, no
+`REVIEW NEEDED` markers, and `apex-map-codebase --check --require-reviewed`
+passes.
 
 If no profile exists, use `templates/apex.workflow.json` as the expected shape
 and run the harness installer when the Apex repo is available:
@@ -70,6 +80,13 @@ apex-doctor \
 7. Read the install report. Before the first implementation slice, resolve or
    consciously accept `setup.reviewNeeded`, confirm any `setup.inferredPaths`
    marked `guessed`, and preserve any `operatorCautions`.
+8. If the installer generated a draft codebase map, review it, remove
+   `REVIEW NEEDED` markers, then run:
+
+```bash
+apex-map-codebase --target=. --mark-reviewed --sync-profile
+apex-map-codebase --target=. --check --require-reviewed
+```
 
 Do not treat skill installation as complete until the target repo has a profile.
 When GitNexus is selected, prefer `gitnexus-mcp`. Use `gitnexus-wrapper` only

@@ -17,6 +17,10 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
+import {
+  DEFAULT_CODEBASE_MAP_PATH,
+  GENERATED_MAP_DRAFT_REVIEW_ITEM,
+} from "./lib/codebase-map.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const APEX_ROOT = resolve(SCRIPT_DIR, "..");
@@ -44,6 +48,8 @@ Options:
   --browser=auto|none|agent-browser
   --origin=<url>                  Browser origin when browser provider is enabled.
   --operator-cautions=<text>      Comma-separated human cautions. Not treated as authority paths.
+  --create-codebase-map           Create a draft docs/CODEBASE_MAP.md when installing.
+  --force-codebase-map            Allow overwriting an existing generated codebase map.
   --skill-dir=<path>              Codex skills directory. Defaults to $CODEX_HOME/skills or ~/.codex/skills.
   --skip-agents                   Do not create/update AGENTS.md.
   --skip-skill-link               Do not symlink the local skill.
@@ -615,9 +621,22 @@ async function buildConfig(targetRoot, args) {
       ...authorityResult.inferredPaths.productTruth,
       ...authorityResult.inferredPaths.executionTruth,
     ].filter((record) => record.confidence === "guessed");
+    const shouldCreateCodebaseMap = Boolean(args["create-codebase-map"]);
+    if (shouldCreateCodebaseMap && !orientation.readBeforeBroadSearch.includes(DEFAULT_CODEBASE_MAP_PATH)) {
+      orientation.readBeforeBroadSearch.push(DEFAULT_CODEBASE_MAP_PATH);
+      orientationResult.inferredPaths.readBeforeBroadSearch.push({
+        path: DEFAULT_CODEBASE_MAP_PATH,
+        confidence: "generated",
+        reason: "installer will create draft codebase map",
+      });
+    }
+
     const reviewNeeded = [
       ...(authority.productTruth.length === 0 ? ["No product truth doc was detected. Add one to authority.productTruth if the app has it."] : []),
-      ...(orientation.readBeforeBroadSearch.length === 0 ? ["No broad-search orientation doc was detected. Consider adding a codebase map or architecture doc."] : []),
+      ...(orientation.readBeforeBroadSearch.length === 0
+        ? ["No broad-search orientation doc was detected. Run `apex-map-codebase --target=. --write` or add an architecture/codebase doc."]
+        : []),
+      ...(shouldCreateCodebaseMap ? [GENERATED_MAP_DRAFT_REVIEW_ITEM] : []),
       ...(contracts.featureArtifacts.length === 0 && contracts.stateContracts.length === 0
         ? ["No contract directories were detected. Shared-surface work will rely on source search and surrogate docs."]
         : []),
@@ -778,6 +797,35 @@ function validateGeneratedConfig(targetRoot) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+function createCodebaseMap(targetRoot, args) {
+  if (!args["create-codebase-map"]) return { skipped: true, path: null };
+  const mapPath = join(targetRoot, DEFAULT_CODEBASE_MAP_PATH);
+  if (args["dry-run"]) return { skipped: false, path: mapPath, dryRun: true };
+  if (existsSync(mapPath) && !args["force-codebase-map"]) {
+    return { skipped: false, path: mapPath, alreadyExists: true };
+  }
+
+  const commandArgs = [
+    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
+    `--target=${targetRoot}`,
+    "--write",
+  ];
+  if (args["force-codebase-map"]) commandArgs.push("--force");
+
+  const result = spawnSync(process.execPath, commandArgs, {
+    cwd: targetRoot,
+    encoding: "utf8",
+    stdio: "pipe",
+  });
+
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`codebase map creation failed\n${result.stdout}${result.stderr}`);
+  }
+
+  return { skipped: false, path: mapPath, stdout: result.stdout };
+}
+
 function getGitStatus(targetRoot) {
   const result = spawnSync("git", ["-C", targetRoot, "status", "--short", "--branch"], {
     encoding: "utf8",
@@ -862,7 +910,7 @@ function printInstallReport({ config, targetRoot, dryRun }) {
   }
 }
 
-function printSummary({ targetRoot, configPath, agentsResult, skillResult, dryRun, config }) {
+function printSummary({ targetRoot, configPath, agentsResult, skillResult, mapResult, dryRun, config }) {
   const prefix = dryRun ? "[apex-init] dry run complete" : "[apex-init] installed";
   console.log(prefix);
   console.log(`- target: ${targetRoot}`);
@@ -870,6 +918,10 @@ function printSummary({ targetRoot, configPath, agentsResult, skillResult, dryRu
   if (agentsResult.skipped) console.log("- AGENTS.md: skipped");
   else console.log(`- AGENTS.md: ${relative(targetRoot, agentsResult.path)}`);
   console.log("- .gitignore: Apex local artifact block");
+  if (mapResult?.skipped) console.log("- codebase map: skipped");
+  else if (mapResult?.dryRun) console.log(`- codebase map: would write ${relative(targetRoot, mapResult.path)}`);
+  else if (mapResult?.alreadyExists) console.log(`- codebase map: existing ${relative(targetRoot, mapResult.path)}`);
+  else if (mapResult?.path) console.log(`- codebase map: ${relative(targetRoot, mapResult.path)} (draft)`);
   if (skillResult.skipped) console.log("- skill link: skipped");
   else console.log(`- skill link: ${skillResult.path}${skillResult.alreadyInstalled ? " (already installed)" : ""}`);
   console.log("- next: use $apex-workflow in the target repo and read apex.workflow.json before selecting a mode");
@@ -898,12 +950,13 @@ async function main() {
     writeFileSync(configPath, rendered);
   }
 
+  const mapResult = createCodebaseMap(targetRoot, args);
   const agentsResult = upsertAgentsBlock(targetRoot, args);
   upsertGitignoreBlock(targetRoot, args);
   const skillResult = installSkillLink(args);
 
   if (!args["dry-run"]) validateGeneratedConfig(targetRoot);
-  printSummary({ targetRoot, configPath, agentsResult, skillResult, dryRun: Boolean(args["dry-run"]), config });
+  printSummary({ targetRoot, configPath, agentsResult, skillResult, mapResult, dryRun: Boolean(args["dry-run"]), config });
 }
 
 main().catch((error) => {

@@ -36,6 +36,7 @@ APEX WORKFLOW CONTROL PLANE
 [apex-workflow repo]
   scripts/init-harness.mjs
   scripts/check-config.mjs
+  scripts/apex-map-codebase.mjs
   scripts/apex-doctor.mjs
   scripts/apex-manifest.mjs
   skills/apex-workflow/SKILL.md
@@ -161,6 +162,29 @@ apex-doctor --target=/path/to/app --config=apex.workflow.json
 ```
 
 The doctor checks unresolved setup review items, guessed inferred paths, whether `tmp/apex-workflow/` is ignored, the managed `AGENTS.md` block, adapter readiness, the local skill symlink, and whether the installed setup has a clean baseline checkpoint.
+
+## Create A Codebase Map
+
+If the install report says no broad-search orientation doc was detected, create
+a draft map:
+
+```bash
+apex-map-codebase --target=/path/to/app --write
+```
+
+The generated `docs/CODEBASE_MAP.md` starts as `Status: draft`. It is a
+scaffold, not authority. Review the file, resolve every `REVIEW NEEDED` marker,
+then mark it reviewed and sync the profile:
+
+```bash
+cd /path/to/app
+apex-map-codebase --target=. --mark-reviewed --sync-profile
+apex-map-codebase --target=. --check --require-reviewed
+```
+
+`apex-init --create-codebase-map` can create the draft during install. It keeps
+a setup review item until the map is reviewed so agents do not treat generated
+guesses as confirmed routing truth.
 
 ## What The Profile Controls
 

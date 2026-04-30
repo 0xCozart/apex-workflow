@@ -5,7 +5,10 @@ final context.
 
 ## Route
 
-1. Read profile orientation docs.
+1. Read profile orientation docs. If `docs/CODEBASE_MAP.md` is present but
+   `Status: draft`, use it only as a scaffold and verify ownership in source.
+   Treat it as routing authority only after
+   `apex-map-codebase --check --require-reviewed` passes.
 2. Use configured code-intelligence query/context when ownership is unclear.
 3. Route from low-level symbols back to product surfaces.
 4. Read feature artifacts and state contracts from the configured paths.
@@ -26,4 +29,3 @@ final context.
 
 Every meaningful manifest should list no-touch surfaces when the repo is dirty,
 when another agent may be working, or when adjacent high-risk areas are visible.
-

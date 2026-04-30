@@ -66,6 +66,24 @@ The installer writes `apex.workflow.json`, updates `AGENTS.md`, validates the
 profile, prints an install report, and links the local skill unless
 `--skip-skill-link` is passed.
 
+If no broad-search orientation doc exists, create a draft codebase map:
+
+```bash
+apex-map-codebase --target=/path/to/app --write
+```
+
+The installer can create the draft during setup with
+`--create-codebase-map`. Draft maps are not authority. Review
+`docs/CODEBASE_MAP.md`, remove every `REVIEW NEEDED` marker, then run:
+
+```bash
+apex-map-codebase --target=/path/to/app --mark-reviewed --sync-profile
+apex-map-codebase --target=/path/to/app --check --require-reviewed
+```
+
+`--sync-profile` removes only the generated draft-map review item from
+`setup.reviewNeeded`; it preserves unrelated setup concerns.
+
 The install report includes:
 
 - inferred authority and orientation paths with `confirmed`, `guessed`, or `generated` confidence
@@ -103,8 +121,8 @@ apex-doctor \
 
 It checks unresolved installer review items, guessed inferred paths,
 `tmp/apex-workflow/` ignore coverage, the managed `AGENTS.md` block, configured
-adapter readiness, the skill symlink, and whether setup files have a clean git
-baseline.
+adapter readiness, codebase-map readiness when configured, the skill symlink,
+and whether setup files have a clean git baseline.
 
 ## Manifest Evidence
 
