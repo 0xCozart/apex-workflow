@@ -91,7 +91,7 @@ export async function runTrustedCommand(command, options = {}) {
     cwd,
     shell,
     env,
-    detached: true,
+    detached: process.platform !== "win32",
     windowsHide: true,
   });
 
