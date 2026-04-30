@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { redact, tailRedacted } from "./redact.mjs";
+import { resolveInsideRoot } from "./paths.mjs";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_OUTPUT_LIMIT = 1_000_000;
@@ -12,9 +13,9 @@ function sha256(value) {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-function writeLog(logPath, body) {
+function writeLog(logPath, body, root = process.cwd()) {
   if (!logPath) return null;
-  const absolute = resolve(process.cwd(), logPath);
+  const absolute = resolveInsideRoot(root, logPath, { label: "command log path", file: true }).absolute;
   mkdirSync(dirname(absolute), { recursive: true });
   writeFileSync(absolute, body);
   return sha256(body);
@@ -153,7 +154,7 @@ export async function runTrustedCommand(command, options = {}) {
     stderrTail.text,
     "",
   ].join("\n");
-  const logSha256 = writeLog(options.logPath, logBody);
+  const logSha256 = writeLog(options.logPath, logBody, cwd);
 
   return {
     command: safeCommand,

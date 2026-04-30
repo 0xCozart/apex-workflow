@@ -3,6 +3,8 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, r
 import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
+const DEFAULT_STALE_LOCK_MS = 10 * 60 * 1000;
+
 function sha256(value) {
   return createHash("sha256").update(String(value)).digest("hex");
 }
@@ -37,13 +39,36 @@ export function lockPathForManifest(filePath, root = process.cwd()) {
   return join(root, "tmp/apex-workflow/locks", `${key}.lock`);
 }
 
+function lockAgeMs(lockPath) {
+  try {
+    const payload = JSON.parse(readFileSync(lockPath, "utf8"));
+    const createdAt = Date.parse(payload.createdAt ?? "");
+    if (!Number.isFinite(createdAt)) return 0;
+    return Date.now() - createdAt;
+  } catch {
+    return 0;
+  }
+}
+
 export function withManifestLock(filePath, callback, options = {}) {
   const lockPath = options.lockPath ?? lockPathForManifest(filePath, options.root ?? process.cwd());
+  const staleMs = Number(options.staleMs ?? DEFAULT_STALE_LOCK_MS);
   mkdirSync(dirname(lockPath), { recursive: true });
   let fd = null;
   let acquired = false;
+  let removedStaleLock = false;
   try {
-    fd = openSync(lockPath, "wx");
+    try {
+      fd = openSync(lockPath, "wx");
+    } catch (error) {
+      if (error?.code === "EEXIST" && staleMs >= 0 && lockAgeMs(lockPath) > staleMs) {
+        rmSync(lockPath, { force: true });
+        removedStaleLock = true;
+        fd = openSync(lockPath, "wx");
+      } else {
+        throw error;
+      }
+    }
     acquired = true;
     writeFileSync(
       fd,
@@ -65,11 +90,14 @@ export function withManifestLock(filePath, callback, options = {}) {
   } catch (error) {
     if (fd !== null) closeSync(fd);
     if (error?.code === "EEXIST") {
-      throw new Error(`manifest lock exists: ${lockPath}`);
+      throw new Error(
+        `manifest lock exists: ${lockPath}. If no Apex process is running, wait for the stale lock timeout or remove the lock.`,
+      );
     }
     throw error;
   } finally {
     if (fd !== null) closeSync(fd);
     if (acquired && existsSync(lockPath)) rmSync(lockPath, { force: true });
+    if (removedStaleLock && existsSync(lockPath)) rmSync(lockPath, { force: true });
   }
 }

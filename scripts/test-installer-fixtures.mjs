@@ -3,9 +3,10 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import process from "node:process";
+import { lockPathForManifest } from "./lib/manifest-store.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const APEX_ROOT = resolve(SCRIPT_DIR, "..");
@@ -63,6 +64,10 @@ function runCommand(command, args, options = {}) {
     );
   }
   return result;
+}
+
+function runNodeModule(source, options = {}) {
+  return runCommand(process.execPath, ["--input-type=module", "--eval", source], options);
 }
 
 function runNpm(args, options = {}) {
@@ -1108,6 +1113,44 @@ function testControlPlaneHardening(root) {
     "path escape failure should be clear",
   );
 
+  const absoluteOutsideManifest = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      `--file=${join(root, "outside-absolute.json")}`,
+      "--issue=none",
+      "--mode=tiny",
+      "--surface=escape",
+      "--files=PRODUCT.md",
+      "--downshift=tiny: absolute path escape fixture",
+      "--browser=skip",
+      "--typecheck=skip",
+      "--required=node --version",
+    ],
+    { cwd: target, allowFailure: true },
+  );
+  assert(absoluteOutsideManifest.status !== 0, "absolute manifest path escape should fail");
+
+  const pathSlug = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=../bad",
+      "--issue=none",
+      "--mode=tiny",
+      "--surface=escape",
+      "--files=PRODUCT.md",
+      "--downshift=tiny: slug path escape fixture",
+      "--browser=skip",
+      "--typecheck=skip",
+      "--required=node --version",
+    ],
+    { cwd: target, allowFailure: true },
+  );
+  assert(pathSlug.status !== 0, "manifest slug path escape should fail");
+
   const escapedMap = run(
     [join(APEX_ROOT, "scripts/apex-map-codebase.mjs"), `--target=${target}`, "--output=../../outside.md", "--write"],
     { allowFailure: true },
@@ -1137,7 +1180,7 @@ function testControlPlaneHardening(root) {
       "--issue=none",
       "--mode=tiny",
       "--surface=product doc",
-      "--files=PRODUCT.md,package-lock.json",
+      "--files=PRODUCT.md,package-lock.json,apex.workflow.json",
       "--downshift=tiny: control-plane fixture",
       "--browser=skip: docs only",
       "--typecheck=skip: docs only",
@@ -1145,6 +1188,80 @@ function testControlPlaneHardening(root) {
     ],
     { cwd: target },
   );
+
+  const escapedFinish = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "finish",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--verified=none",
+      "--next=none",
+      "--out=../../outside.md",
+    ],
+    { cwd: target, allowFailure: true },
+  );
+  assert(escapedFinish.status !== 0, "finish packet output path escape should fail");
+
+  const manifestPath = join(target, "tmp/apex-workflow/hardening.json");
+  const freshLockPath = lockPathForManifest(manifestPath, target);
+  mkdirSync(dirname(freshLockPath), { recursive: true });
+  writeFileSync(freshLockPath, JSON.stringify({ createdAt: new Date().toISOString(), pid: 123456 }, null, 2));
+  const freshLock = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "record-check",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--cmd=node --version",
+      "--status=passed",
+    ],
+    { cwd: target, allowFailure: true },
+  );
+  assert(freshLock.status !== 0, "fresh manifest lock should block writes");
+  assert(
+    `${freshLock.stdout}\n${freshLock.stderr}`.includes("manifest lock exists"),
+    "fresh lock failure should be clear",
+  );
+  rmSync(freshLockPath, { force: true });
+  writeFileSync(freshLockPath, JSON.stringify({ createdAt: "2000-01-01T00:00:00.000Z", pid: 123456 }, null, 2));
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "record-check",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--cmd=node --version",
+      "--status=skipped",
+      "--note=stale lock recovery fixture",
+    ],
+    { cwd: target },
+  );
+  assert(!existsSync(freshLockPath), "stale manifest lock should be replaced and cleaned up");
+
+  const runnerUrl = pathToFileURL(join(APEX_ROOT, "scripts/lib/runner.mjs")).href;
+  const escapedLog = join(root, "outside-command.log");
+  const runnerOutsideLog = runNodeModule(
+    [
+      `const { runTrustedCommand } = await import(${JSON.stringify(runnerUrl)});`,
+      `await runTrustedCommand('node --version', { cwd: ${JSON.stringify(target)}, logPath: ${JSON.stringify(
+        escapedLog,
+      )} });`,
+    ].join("\n"),
+    { allowFailure: true },
+  );
+  assert(runnerOutsideLog.status !== 0, "runner log path escape should fail");
+  assert(!existsSync(escapedLog), "escaped runner log should not be written");
+  const insideLog = "tmp/apex-workflow/logs/runner-boundary.log";
+  runNodeModule(
+    [
+      `const { runTrustedCommand } = await import(${JSON.stringify(runnerUrl)});`,
+      `await runTrustedCommand('node --version', { cwd: ${JSON.stringify(target)}, logPath: ${JSON.stringify(
+        insideLog,
+      )} });`,
+    ].join("\n"),
+  );
+  assert(existsSync(join(target, insideLog)), "repo-local runner log should be written");
 
   const childMarker = join(target, "tmp/apex-workflow/timeout-child-alive.txt");
   const timeoutScript = join(target, "tmp/apex-workflow/timeout-child.mjs");
@@ -1218,6 +1335,20 @@ function testControlPlaneHardening(root) {
     ],
     { cwd: target },
   );
+  const cleanClose = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "close",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--skip-required",
+      "--next=none",
+    ],
+    { cwd: target },
+  );
+  assert(cleanClose.status === 0, "fresh evidence should not be stale because Apex wrote manifest/log/lock files");
+
+  const originalPackageLock = JSON.stringify({ name: "fixture", lockfileVersion: 3 }, null, 2);
   writeFileSync(
     join(target, "package-lock.json"),
     JSON.stringify({ name: "fixture", lockfileVersion: 3, changed: true }, null, 2),
@@ -1238,6 +1369,70 @@ function testControlPlaneHardening(root) {
     `${stale.stdout}\n${stale.stderr}`.includes("stale required evidence"),
     "stale evidence output should be clear",
   );
+  writeFileSync(join(target, "package-lock.json"), originalPackageLock);
+
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--cmd=node --version",
+    ],
+    { cwd: target },
+  );
+  const configPath = join(target, "apex.workflow.json");
+  const originalConfig = readFileSync(configPath, "utf8");
+  const changedConfig = JSON.parse(originalConfig);
+  changedConfig.operatorCautions = ["profile changed after passing evidence"];
+  writeFileSync(configPath, `${JSON.stringify(changedConfig, null, 2)}\n`);
+  const profileStale = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "close",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--skip-required",
+      "--next=none",
+    ],
+    { cwd: target, allowFailure: true },
+  );
+  assert(profileStale.status !== 0, "apex.workflow.json change should stale required evidence");
+  assert(
+    `${profileStale.stdout}\n${profileStale.stderr}`.includes("stale required evidence"),
+    "profile stale evidence output should be clear",
+  );
+  writeFileSync(configPath, originalConfig);
+
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--cmd=node --version",
+    ],
+    { cwd: target },
+  );
+  const commandChangedManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  commandChangedManifest.checks.required = ['node -e "console.log(process.version)"'];
+  writeFileSync(manifestPath, `${JSON.stringify(commandChangedManifest, null, 2)}\n`);
+  const commandChanged = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "close",
+      "--config=apex.workflow.json",
+      "--slug=hardening",
+      "--skip-required",
+      "--next=none",
+    ],
+    { cwd: target, allowFailure: true },
+  );
+  assert(commandChanged.status !== 0, "required command string change should require new evidence");
+  assert(
+    `${commandChanged.stdout}\n${commandChanged.stderr}`.includes("required check has no passing evidence"),
+    "command change stale evidence output should be clear",
+  );
 
   const rollbackTarget = join(root, "rollback-target");
   mkdirSync(rollbackTarget, { recursive: true });
@@ -1246,16 +1441,25 @@ function testControlPlaneHardening(root) {
     JSON.stringify({ name: "rollback-target", private: true }, null, 2),
   );
   writeFileSync(join(rollbackTarget, "AGENTS.md"), "original agents\n");
+  writeFileSync(join(rollbackTarget, ".gitignore"), "original ignore\n");
+  mkdirSync(join(rollbackTarget, "docs"), { recursive: true });
+  writeFileSync(join(rollbackTarget, "docs/CODEBASE_MAP.md"), "original map\n");
+  const rollbackSkillDir = join(root, "skills-rollback");
+  const rollbackSkillPath = join(rollbackSkillDir, "apex-workflow");
+  mkdirSync(rollbackSkillPath, { recursive: true });
+  writeFileSync(join(rollbackSkillPath, "SKILL.md"), "original skill\n");
   const rollback = runCommand(
     process.execPath,
     [
       join(APEX_ROOT, "scripts/init-harness.mjs"),
       `--target=${rollbackTarget}`,
-      `--skill-dir=${join(root, "skills-rollback")}`,
+      `--skill-dir=${rollbackSkillDir}`,
       "--config-mode=custom",
       "--tracker=none",
       "--code-intelligence=focused-search",
       "--browser=none",
+      "--create-codebase-map",
+      "--force",
       "--yes",
     ],
     { env: { APEX_INIT_FAIL_AFTER_COMMIT: "1" }, allowFailure: true },
@@ -1265,6 +1469,18 @@ function testControlPlaneHardening(root) {
   assert(
     readFileSync(join(rollbackTarget, "AGENTS.md"), "utf8") === "original agents\n",
     "rollback should restore AGENTS",
+  );
+  assert(
+    readFileSync(join(rollbackTarget, ".gitignore"), "utf8") === "original ignore\n",
+    "rollback should restore .gitignore",
+  );
+  assert(
+    readFileSync(join(rollbackTarget, "docs/CODEBASE_MAP.md"), "utf8") === "original map\n",
+    "rollback should restore CODEBASE_MAP",
+  );
+  assert(
+    readFileSync(join(rollbackSkillPath, "SKILL.md"), "utf8") === "original skill\n",
+    "rollback should restore existing skill path",
   );
 
   const doctor = run(
