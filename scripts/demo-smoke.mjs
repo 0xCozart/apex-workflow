@@ -21,6 +21,24 @@ function run(command, args, options = {}) {
   return result;
 }
 
+function escapeWorkflowCommand(value) {
+  return String(value)
+    .replace(/%/g, "%25")
+    .replace(/\r/g, "%0D")
+    .replace(/\n/g, "%0A")
+    .replace(/:/g, "%3A")
+    .replace(/,/g, "%2C");
+}
+
+function cleanupDemoRoot(root) {
+  try {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[apex-demo] warning: could not fully remove temp demo root: ${message}`);
+  }
+}
+
 function nodeScript(scriptName, args, options = {}) {
   return run(process.execPath, [join(APEX_ROOT, "scripts", scriptName), ...args], options);
 }
@@ -100,9 +118,19 @@ function main() {
 
     console.log(`[apex-demo] ok: ${target}`);
   } finally {
-    if (!keep) rmSync(root, { recursive: true, force: true });
+    if (!keep) cleanupDemoRoot(root);
     else console.log(`[apex-demo] kept: ${root}`);
   }
 }
 
-main();
+try {
+  main();
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(
+    `::error file=scripts/demo-smoke.mjs,title=${escapeWorkflowCommand("demo smoke failed")}::${escapeWorkflowCommand(
+      message,
+    )}`,
+  );
+  throw error;
+}

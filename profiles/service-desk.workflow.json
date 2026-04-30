@@ -72,6 +72,8 @@
     "focusedChecksFirst": true,
     "requiredCommands": ["npm test"],
     "optionalCommands": [],
+    "freshnessInputs": ["package.json"],
+    "envAllowlist": [],
     "knownFailures": null,
     "browser": {
       "provider": "none",

@@ -2,6 +2,8 @@
 
 This repo is an installable workflow harness.
 
+Read `docs/CODEBASE_MAP.md` for codebase orientation before searching broadly.
+
 When a user asks you to install or configure Apex Workflow for an app repo, do
 not stop at copying the skill. Configure the target repo with the harness
 installer.

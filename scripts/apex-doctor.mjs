@@ -11,6 +11,8 @@ import {
   GENERATED_MAP_DRAFT_REVIEW_ITEM,
   evaluateCodebaseMap,
 } from "./lib/codebase-map.mjs";
+import { resolveInsideRoot } from "./lib/paths.mjs";
+import { runTrustedCommand } from "./lib/runner.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const APEX_ROOT = resolve(SCRIPT_DIR, "..");
@@ -31,6 +33,7 @@ Options:
   --skip-commands       Check config presence without executing status commands.
   --mcp-available       Mark GitNexus MCP as available for this host/session.
   --strict              Treat warnings as failures.
+  --json                Print machine-readable readiness output.
 `;
   (exitCode === 0 ? console.log : console.error)(message.trim());
   process.exit(exitCode);
@@ -61,7 +64,17 @@ function add(checks, status, label, detail) {
 }
 
 function run(command, cwd) {
-  return spawnSync(command, { cwd, shell: true, encoding: "utf8", stdio: "pipe" });
+  const result = runTrustedCommand(command, {
+    cwd,
+    commandSource: "doctor-status",
+    timeoutMs: 120000,
+  });
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    error: result.error,
+  };
 }
 
 function collectGuessedPaths(value, prefix = "setup.inferredPaths") {
@@ -312,7 +325,10 @@ function runConfigCheck(checks, configPath, targetRoot) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const targetRoot = resolve(process.cwd(), String(args.target ?? "."));
-  const configPath = resolve(targetRoot, String(args.config ?? "apex.workflow.json"));
+  const configPath = resolveInsideRoot(targetRoot, String(args.config ?? "apex.workflow.json"), {
+    label: "config path",
+    file: true,
+  }).absolute;
   const checks = [];
 
   if (!existsSync(configPath)) throw new Error(`config not found: ${configPath}`);
@@ -363,12 +379,34 @@ function main() {
   checkSkillLink(checks, config, args);
   checkBaseline(checks, targetRoot);
 
-  const failCount = checks.filter((check) => check.status === "fail" || (args.strict && check.status === "warn")).length;
+  const strict = Boolean(args.strict);
+  const decoratedChecks = checks.map((check) => ({
+    ...check,
+    effectiveStatus: strict && check.status === "warn" ? "fail" : check.status,
+  }));
+  const failCount = decoratedChecks.filter((check) => check.effectiveStatus === "fail").length;
   const warnCount = checks.filter((check) => check.status === "warn").length;
 
+  if (args.json) {
+    const report = {
+      ok: failCount === 0,
+      strict,
+      target: targetRoot,
+      config: configPath,
+      blockers: decoratedChecks.filter((check) => check.effectiveStatus === "fail"),
+      warnings: decoratedChecks.filter((check) => check.status === "warn"),
+      info: decoratedChecks.filter((check) => check.status === "pass"),
+      checks: decoratedChecks,
+    };
+    console.log(JSON.stringify(report, null, 2));
+    if (!report.ok) process.exit(1);
+    return;
+  }
+
   console.log("[apex-doctor] readiness report");
-  for (const check of checks) {
-    console.log(`- [${check.status}] ${check.label}: ${check.detail}`);
+  for (const check of decoratedChecks) {
+    const status = check.effectiveStatus !== check.status ? `${check.status}->${check.effectiveStatus}` : check.status;
+    console.log(`- [${status}] ${check.label}: ${check.detail}`);
   }
 
   if (failCount > 0) {

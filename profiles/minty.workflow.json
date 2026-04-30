@@ -129,6 +129,8 @@
     "focusedChecksFirst": true,
     "requiredCommands": [],
     "optionalCommands": ["npm run typecheck"],
+    "freshnessInputs": ["package.json", "package-lock.json"],
+    "envAllowlist": [],
     "knownFailures": "docs/runbooks/known-verification-failures.md",
     "workflowDoctor": "npm run workflow:doctor",
     "plansCheck": "npm run plans:check -- --file={file}",

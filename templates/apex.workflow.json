@@ -94,6 +94,8 @@
     "focusedChecksFirst": true,
     "requiredCommands": [],
     "optionalCommands": [],
+    "freshnessInputs": ["package.json", "package-lock.json"],
+    "envAllowlist": [],
     "knownFailures": null,
     "browser": {
       "provider": "none",

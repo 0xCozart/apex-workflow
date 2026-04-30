@@ -31,17 +31,41 @@ function run(args, options = {}) {
   return result;
 }
 
+function portableCommand(command) {
+  const value = String(command);
+  if (process.platform !== "win32") return value;
+  if (value.toLowerCase().endsWith(".cmd") || value.toLowerCase().endsWith(".exe") || value.toLowerCase().endsWith(".bat")) {
+    return value;
+  }
+  const cmdShim = `${value}.cmd`;
+  if (existsSync(cmdShim)) return cmdShim;
+  if (!value.includes("/") && !value.includes("\\")) return cmdShim;
+  return value;
+}
+
 function runCommand(command, args, options = {}) {
-  const result = spawnSync(command, args, {
+  const resolvedCommand = portableCommand(command);
+  const useShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(resolvedCommand);
+  const result = spawnSync(resolvedCommand, args, {
     cwd: options.cwd ?? APEX_ROOT,
     encoding: "utf8",
     stdio: "pipe",
+    shell: useShell,
     env: { ...process.env, ...(options.env ?? {}) },
   });
   if (!options.allowFailure && result.status !== 0) {
-    throw new Error(`${command} ${args.join(" ")} failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    throw new Error(
+      `${resolvedCommand} ${args.join(" ")} failed\nerror:\n${result.error?.message ?? ""}\nstdout:\n${result.stdout ?? ""}\nstderr:\n${result.stderr ?? ""}`,
+    );
   }
   return result;
+}
+
+function runNpm(args, options = {}) {
+  if (process.env.npm_execpath) {
+    return runCommand(process.execPath, [process.env.npm_execpath, ...args], options);
+  }
+  return runCommand("npm", args, options);
 }
 
 function git(target, args) {
@@ -175,6 +199,7 @@ function testNoAdaptersDoctor(root) {
     join(APEX_ROOT, "scripts/check-config.mjs"),
     "--config=profiles/service-desk.workflow.json",
     `--target=${target}`,
+    "--allow-outside-config",
   ]);
 }
 
@@ -580,6 +605,7 @@ function testSchemaValidation(root) {
     join(APEX_ROOT, "scripts/check-config.mjs"),
     "--config=profiles/service-desk.workflow.json",
     "--target=fixtures/config/service-desk",
+    "--allow-outside-config",
     "--format=json",
   ]);
   const validJson = JSON.parse(valid.stdout);
@@ -603,6 +629,7 @@ function testSchemaValidation(root) {
     join(APEX_ROOT, "scripts/check-config.mjs"),
     `--config=${invalidConfig}`,
     "--target=fixtures/config/service-desk",
+    "--allow-outside-config",
     "--format=json",
   ], { allowFailure: true });
   assert(invalid.status !== 0, "schema-invalid profile should fail");
@@ -781,9 +808,9 @@ function testPortableCliEntrypoints(root) {
   writeFileSync(join(installRoot, "package.json"), JSON.stringify({ private: true }, null, 2));
 
   const npmEnv = { npm_config_cache: join(root, "npm-cache") };
-  const pack = runCommand("npm", ["pack", "--pack-destination", packRoot, "--silent"], { env: npmEnv });
+  const pack = runNpm(["pack", "--pack-destination", packRoot, "--silent"], { env: npmEnv });
   const tarball = join(packRoot, pack.stdout.trim().split("\n").pop());
-  runCommand("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball], { cwd: installRoot, env: npmEnv });
+  runNpm(["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball], { cwd: installRoot, env: npmEnv });
 
   const binDir = join(installRoot, "node_modules/.bin");
   const apexInit = join(binDir, "apex-init");
@@ -838,30 +865,213 @@ function testTrustModelDocs() {
   assert(skill.includes("trusted executable workflow configuration"), "skill should describe trust boundary");
 }
 
+function latestRun(target, slug) {
+  const manifest = JSON.parse(readFileSync(join(target, `tmp/apex-workflow/${slug}.json`), "utf8"));
+  return manifest.checks.runs[manifest.checks.runs.length - 1];
+}
+
+function escapeWorkflowCommand(value) {
+  return String(value)
+    .replace(/%/g, "%25")
+    .replace(/\r/g, "%0D")
+    .replace(/\n/g, "%0A")
+    .replace(/:/g, "%3A")
+    .replace(/,/g, "%2C");
+}
+
+function fixture(name, fn) {
+  console.log(`[apex-fixtures] ${name}`);
+  try {
+    fn();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `::error file=scripts/test-installer-fixtures.mjs,title=${escapeWorkflowCommand(
+        `fixture failed: ${name}`,
+      )}::${escapeWorkflowCommand(message)}`,
+    );
+    throw error;
+  }
+}
+
+function cleanupFixtureRoot(root) {
+  try {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[apex-fixtures] warning: could not fully remove temp fixture root: ${message}`);
+  }
+}
+
+function testControlPlaneHardening(root) {
+  const target = makeTarget(root, "no-adapters", "control-plane-hardening");
+  writeFileSync(join(target, "package-lock.json"), JSON.stringify({ name: "fixture", lockfileVersion: 3 }, null, 2));
+  const skillDir = join(root, "skills-control-plane");
+  initHarness(target, ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"], skillDir);
+
+  const escapedManifest = run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "new",
+    "--config=apex.workflow.json",
+    "--file=../../outside.json",
+    "--issue=none",
+    "--mode=tiny",
+    "--surface=escape",
+    "--files=PRODUCT.md",
+    "--downshift=tiny: path escape fixture",
+    "--browser=skip",
+    "--typecheck=skip",
+    "--required=node --version",
+  ], { cwd: target, allowFailure: true });
+  assert(escapedManifest.status !== 0, "manifest path escape should fail");
+  assert(`${escapedManifest.stdout}\n${escapedManifest.stderr}`.includes("must stay inside target repo"), "path escape failure should be clear");
+
+  const escapedMap = run([
+    join(APEX_ROOT, "scripts/apex-map-codebase.mjs"),
+    `--target=${target}`,
+    "--output=../../outside.md",
+    "--write",
+  ], { allowFailure: true });
+  assert(escapedMap.status !== 0, "codebase map output escape should fail");
+
+  const outsideConfig = run([
+    join(APEX_ROOT, "scripts/check-config.mjs"),
+    "--config=../../outside.workflow.json",
+    `--target=${target}`,
+  ], { allowFailure: true });
+  assert(outsideConfig.status !== 0, "outside config should fail without explicit allow flag");
+
+  assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["add", "."]).status === 0, "git add failed");
+  assert(
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"]).status === 0,
+    "git commit failed",
+  );
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "new",
+    "--config=apex.workflow.json",
+    "--slug=hardening",
+    "--issue=none",
+    "--mode=tiny",
+    "--surface=product doc",
+    "--files=PRODUCT.md,package-lock.json",
+    "--downshift=tiny: control-plane fixture",
+    "--browser=skip: docs only",
+    "--typecheck=skip: docs only",
+    "--required=node --version",
+  ], { cwd: target });
+
+  const timeout = run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "run-check",
+    "--config=apex.workflow.json",
+    "--slug=hardening",
+    "--timeout-ms=250",
+    "--cmd=node -e \"setTimeout(() => {}, 5000)\"",
+  ], { cwd: target, allowFailure: true });
+  assert(timeout.status !== 0, "hanging command should time out");
+  assert(latestRun(target, "hardening").timedOut === true, "timed out run should be recorded");
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "run-check",
+    "--config=apex.workflow.json",
+    "--slug=hardening",
+    "--cmd=node -e \"console.log('OPENAI_API_KEY=sk-fakefakefakefake'); console.error('Bearer ghp_fakefakefakefake')\"",
+  ], { cwd: target });
+  const redactedRun = latestRun(target, "hardening");
+  const redactedLog = readFileSync(join(target, redactedRun.logPath), "utf8");
+  assert(!redactedLog.includes("sk-fakefakefakefake"), "OpenAI token should be redacted from log");
+  assert(!redactedLog.includes("ghp_fakefakefakefake"), "GitHub token should be redacted from log");
+  assert(!redactedRun.command.includes("sk-fakefakefakefake"), "token should be redacted from recorded command");
+
+  run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "run-check",
+    "--config=apex.workflow.json",
+    "--slug=hardening",
+    "--cmd=node --version",
+  ], { cwd: target });
+  writeFileSync(join(target, "package-lock.json"), JSON.stringify({ name: "fixture", lockfileVersion: 3, changed: true }, null, 2));
+  const stale = run([
+    join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+    "close",
+    "--config=apex.workflow.json",
+    "--slug=hardening",
+    "--skip-required",
+    "--next=none",
+  ], { cwd: target, allowFailure: true });
+  assert(stale.status !== 0, "package-lock change should stale required evidence");
+  assert(`${stale.stdout}\n${stale.stderr}`.includes("stale required evidence"), "stale evidence output should be clear");
+
+  const rollbackTarget = join(root, "rollback-target");
+  mkdirSync(rollbackTarget, { recursive: true });
+  writeFileSync(join(rollbackTarget, "package.json"), JSON.stringify({ name: "rollback-target", private: true }, null, 2));
+  writeFileSync(join(rollbackTarget, "AGENTS.md"), "original agents\n");
+  const rollback = runCommand(process.execPath, [
+    join(APEX_ROOT, "scripts/init-harness.mjs"),
+    `--target=${rollbackTarget}`,
+    `--skill-dir=${join(root, "skills-rollback")}`,
+    "--config-mode=custom",
+    "--tracker=none",
+    "--code-intelligence=focused-search",
+    "--browser=none",
+    "--yes",
+  ], { env: { APEX_INIT_FAIL_AFTER_COMMIT: "1" }, allowFailure: true });
+  assert(rollback.status !== 0, "forced late init failure should fail");
+  assert(!existsSync(join(rollbackTarget, "apex.workflow.json")), "rollback should remove generated profile");
+  assert(readFileSync(join(rollbackTarget, "AGENTS.md"), "utf8") === "original agents\n", "rollback should restore AGENTS");
+
+  const doctor = run([
+    join(APEX_ROOT, "scripts/apex-doctor.mjs"),
+    `--target=${target}`,
+    `--skill-dir=${skillDir}`,
+    "--skip-commands",
+    "--json",
+  ], { allowFailure: true });
+  const doctorJson = JSON.parse(doctor.stdout);
+  assert(Array.isArray(doctorJson.blockers), "doctor JSON should include blockers");
+  assert(Array.isArray(doctorJson.warnings), "doctor JSON should include warnings");
+  assert(Array.isArray(doctorJson.info), "doctor JSON should include info");
+}
+
 function main() {
   mkdirSync(join(APEX_ROOT, "tmp"), { recursive: true });
   const root = mkdtempSync(join(APEX_ROOT, "tmp/apex-installer-fixtures-"));
   try {
     mkdirSync(root, { recursive: true });
-    testNoAdaptersDoctor(root);
-    testStaleEvidenceDetection(root);
-    testCommandPreviewAndPlaceholderFailure(root);
-    testReconciliationOwnedFilesOnly(root);
-    testLinearGitNexusWrapper(root);
-    testGitNexusFreshnessGate(root);
-    testGitNexusMcpPreferred(root);
-    testExistingAgentsManagedBlock(root);
-    testSchemaValidation(root);
-    testPathCasingMismatch(root);
-    testDryRunNoWrites(root);
-    testCodebaseMapWorkflow(root);
-    testPortableCliEntrypoints(root);
-    testPortabilityScan();
-    testTrustModelDocs();
+    fixture("no-adapters doctor", () => testNoAdaptersDoctor(root));
+    fixture("stale evidence detection", () => testStaleEvidenceDetection(root));
+    fixture("command preview and placeholder failure", () => testCommandPreviewAndPlaceholderFailure(root));
+    fixture("reconciliation owned files only", () => testReconciliationOwnedFilesOnly(root));
+    fixture("linear gitnexus wrapper", () => testLinearGitNexusWrapper(root));
+    fixture("gitnexus freshness gate", () => testGitNexusFreshnessGate(root));
+    fixture("gitnexus mcp preferred", () => testGitNexusMcpPreferred(root));
+    fixture("existing agents managed block", () => testExistingAgentsManagedBlock(root));
+    fixture("schema validation", () => testSchemaValidation(root));
+    fixture("path casing mismatch", () => testPathCasingMismatch(root));
+    fixture("dry-run no writes", () => testDryRunNoWrites(root));
+    fixture("codebase map workflow", () => testCodebaseMapWorkflow(root));
+    fixture("portable cli entrypoints", () => testPortableCliEntrypoints(root));
+    fixture("control-plane hardening", () => testControlPlaneHardening(root));
+    fixture("portability scan", () => testPortabilityScan());
+    fixture("trust model docs", () => testTrustModelDocs());
     console.log("[apex-fixtures] ok");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    cleanupFixtureRoot(root);
   }
 }
 
-main();
+try {
+  main();
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(
+    `::error file=scripts/test-installer-fixtures.mjs,title=${escapeWorkflowCommand(
+      "fixture runner failed",
+    )}::${escapeWorkflowCommand(message)}`,
+  );
+  throw error;
+}

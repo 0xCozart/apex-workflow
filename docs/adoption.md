@@ -66,6 +66,18 @@ apex-doctor --target=/path/to/app --config=apex.workflow.json
 
 Treat failures as setup work, not product implementation work.
 
+## Remote Policy
+
+Apex requires a normal Git repo and uses `origin` as the working remote when
+GitHub-backed workflows are needed.
+
+A local `upstream` remote is optional. Apex must not fail install, doctor,
+manifest creation, verification, close, or finish-packet generation because
+`upstream` is missing.
+
+`upstream` is only relevant for explicit parent-sync, fork-drift comparison, or
+contributing changes back to a parent repository.
+
 ## 2. Profile Review
 
 After install, review `apex.workflow.json`. The profile must answer:
@@ -137,7 +149,10 @@ apex-manifest run-check --config=apex.workflow.json --slug=app-123-slice --cmd="
 
 Each command run stores a manifest record plus a hashed log file under
 `tmp/apex-workflow/logs/<slice>/`. Reviewers can inspect the manifest tails for
-quick context and open the log path for full captured stdout/stderr.
+quick context and open the log path for captured stdout/stderr. Apex redacts
+common token shapes from persisted command strings, tails, and logs. The
+default command timeout is 120000 ms; pass `--timeout-ms=<milliseconds>` for a
+known longer-running trusted check.
 
 Record manual terminal/TUI evidence separately from automated checks:
 

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 import Ajv2020 from "ajv/dist/2020.js";
+import { resolveInsideRoot } from "./lib/paths.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = resolve(SCRIPT_DIR, "../schemas/apex.workflow.schema.json");
@@ -38,8 +39,8 @@ function parseArgs(argv) {
   return args;
 }
 
-function readJson(filePath) {
-  const absolute = resolve(process.cwd(), filePath);
+function readJson(filePath, options = {}) {
+  const absolute = options.absolute ?? resolve(process.cwd(), filePath);
   return {
     absolute,
     value: JSON.parse(readFileSync(absolute, "utf8")),
@@ -100,13 +101,21 @@ function collectDocPath(rawValue) {
   return rawValue.split("#")[0].trim();
 }
 
-function exactPathInfo(filePath) {
+function exactPathInfo(filePath, root = null) {
   const absolute = resolve(filePath);
-  if (!existsSync(absolute)) return { exists: false, exact: false, actualPath: null };
-
   const parsed = parse(absolute);
-  const parts = absolute.slice(parsed.root.length).split(sep).filter(Boolean);
   let current = parsed.root;
+  let parts = absolute.slice(parsed.root.length).split(sep).filter(Boolean);
+
+  if (root) {
+    current = resolve(root);
+    const relativePath = relative(current, absolute);
+    if (relativePath === "") return { exists: true, exact: true, actualPath: absolute };
+    if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+      return { exists: false, exact: false, actualPath: null };
+    }
+    parts = relativePath.split(sep).filter(Boolean);
+  }
 
   for (const [index, part] of parts.entries()) {
     let names;
@@ -118,6 +127,9 @@ function exactPathInfo(filePath) {
 
     if (!names.includes(part)) {
       const caseInsensitiveMatch = names.find((name) => name.toLowerCase() === part.toLowerCase());
+      if (!caseInsensitiveMatch) {
+        return { exists: false, exact: false, actualPath: null };
+      }
       const actualPath = join(current, caseInsensitiveMatch ?? part, ...parts.slice(index + 1));
       return { exists: true, exact: false, actualPath };
     }
@@ -173,6 +185,12 @@ function collectPathEntries(config) {
 function resolveTargetPath(targetRoot, filePath) {
   if (isAbsolute(filePath)) return filePath;
   return join(targetRoot, filePath);
+}
+
+function normalizeTargetRoot(target) {
+  const targetRoot = resolve(process.cwd(), target);
+  if (!existsSync(targetRoot)) return targetRoot;
+  return realpathSync(targetRoot);
 }
 
 function validateConfig(config, options) {
@@ -255,12 +273,12 @@ function validateConfig(config, options) {
   requireArray(manifest, "finishPacket", failures);
 
   if (options.target) {
-    const targetRoot = resolve(process.cwd(), options.target);
+    const targetRoot = normalizeTargetRoot(options.target);
     if (!existsSync(targetRoot)) failures.push(`target does not exist: ${targetRoot}`);
 
     for (const entry of collectPathEntries(config)) {
       const absolute = resolveTargetPath(targetRoot, entry.path);
-      const info = exactPathInfo(absolute);
+      const info = exactPathInfo(absolute, targetRoot);
       if (!info.exists) {
         const message = `${entry.source} points to missing path under target: ${entry.path}`;
         if (entry.required) failures.push(message);
@@ -286,7 +304,21 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.config) usage(1);
 
-  const { absolute, value: config } = readJson(args.config);
+  const targetRoot = args.target ? resolve(process.cwd(), String(args.target)) : process.cwd();
+  let configPath;
+  try {
+    const rawConfigPath = Boolean(args["allow-outside-config"]) ? resolve(process.cwd(), String(args.config)) : args.config;
+    configPath = resolveInsideRoot(targetRoot, rawConfigPath, {
+      label: "config path",
+      file: true,
+      allowOutside: Boolean(args["allow-outside-config"]) || !args.target,
+    }).absolute;
+  } catch (error) {
+    console.error(`[apex-config] ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+
+  const { absolute, value: config } = readJson(args.config, { absolute: configPath });
   const schema = validateSchema(config);
   const repoChecks = schema.ok
     ? validateConfig(config, { target: args.target })

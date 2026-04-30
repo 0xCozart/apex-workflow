@@ -2,9 +2,12 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
+import { repoRelative as repoRelativePath, resolveInsideRoot } from "./lib/paths.mjs";
+import { runTrustedCommand } from "./lib/runner.mjs";
+import { makeRunId, withManifestLock, writeManifestAtomic } from "./lib/manifest-store.mjs";
 
 function usage(exitCode = 0) {
   const message = `
@@ -57,17 +60,17 @@ function parseArgs(argv) {
 }
 
 function repoPath(filePath) {
-  return relative(process.cwd(), resolve(process.cwd(), filePath));
+  return repoRelativePath(process.cwd(), resolve(process.cwd(), filePath));
 }
 
 function readJson(filePath) {
-  const absolute = resolve(process.cwd(), filePath);
+  const absolute = resolveInsideRoot(process.cwd(), filePath, { label: "config path", file: true }).absolute;
   return JSON.parse(readFileSync(absolute, "utf8"));
 }
 
 function readManifest(filePath) {
   if (!filePath) throw new Error("--file is required");
-  const absolute = resolve(process.cwd(), filePath);
+  const absolute = resolveInsideRoot(process.cwd(), filePath, { label: "manifest file", file: true }).absolute;
   if (!existsSync(absolute)) throw new Error(`manifest not found: ${filePath}`);
   return JSON.parse(readFileSync(absolute, "utf8"));
 }
@@ -86,17 +89,20 @@ function manifestPathFromArgs(args, config) {
     throw new Error("--slug must be a non-empty file slug, not a path");
   }
 
-  return join(defaultDir, slug.endsWith(".json") ? slug : `${slug}.json`);
+  return resolveInsideRoot(process.cwd(), join(defaultDir, slug.endsWith(".json") ? slug : `${slug}.json`), {
+    label: "manifest file",
+    file: true,
+  }).relative;
 }
 
 function writeManifest(filePath, manifest) {
-  const absolute = resolve(process.cwd(), filePath);
+  const absolute = resolveInsideRoot(process.cwd(), filePath, { label: "manifest file", file: true }).absolute;
   mkdirSync(dirname(absolute), { recursive: true });
-  writeFileSync(absolute, `${JSON.stringify(manifest, null, 2)}\n`);
+  withManifestLock(absolute, () => writeManifestAtomic(absolute, manifest), { root: process.cwd() });
 }
 
 function repoRelative(filePath) {
-  return relative(process.cwd(), resolve(process.cwd(), filePath)).replace(/\\/g, "/");
+  return repoRelativePath(process.cwd(), resolve(process.cwd(), filePath));
 }
 
 function sha256(value) {
@@ -139,7 +145,8 @@ function normalizeStringArray(value) {
 
 function loadConfig(args) {
   const configPath = args.config ?? "apex.workflow.json";
-  if (!existsSync(resolve(process.cwd(), configPath))) {
+  const absolute = resolveInsideRoot(process.cwd(), configPath, { label: "config path", file: true }).absolute;
+  if (!existsSync(absolute)) {
     throw new Error(`config not found: ${configPath}`);
   }
 
@@ -182,6 +189,8 @@ const SECRET_PATTERNS = [
   /\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi,
 ];
 const TAIL_LIMIT = 4000;
+const FINGERPRINT_IGNORE_DIRS = new Set([".git", "node_modules", ".next", "dist", "build", "coverage", "tmp", ".turbo", ".cache"]);
+const FINGERPRINT_MAX_FILE_BYTES = 1024 * 1024;
 
 function defaultDirtyPolicy(mode) {
   return mode === "reconciliation" ? "owned-files-only" : "fail-unowned";
@@ -331,7 +340,8 @@ function validateManifest(manifest, config) {
 
 function commandNew(args, config) {
   const filePath = manifestPathFromArgs(args, config);
-  if (existsSync(resolve(process.cwd(), filePath)) && !args.force) {
+  const absolute = resolveInsideRoot(process.cwd(), filePath, { label: "manifest file", file: true }).absolute;
+  if (existsSync(absolute) && !args.force) {
     throw new Error(`manifest already exists: ${filePath}. Pass --force to overwrite.`);
   }
 
@@ -356,32 +366,17 @@ function commandFiles(args) {
   for (const filePath of manifest.ownedFiles ?? []) console.log(filePath);
 }
 
-function runShell(command, options = {}) {
-  const result = spawnSync(command, {
-    cwd: process.cwd(),
-    shell: true,
-    encoding: "utf8",
-    stdio: options.inherit ? "inherit" : "pipe",
-  });
-
-  return {
-    command,
-    status: result.status ?? (result.error ? 1 : 0),
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
-    error: result.error,
-  };
-}
-
 function validateRenderedCommand(command) {
   const unresolved = String(command).match(/\{[^}]+\}/g);
   if (unresolved) throw new Error(`command contains unresolved placeholder(s): ${unresolved.join(", ")}`);
 }
 
-function runDetectCommand(manifest, manifestPath, command, changedFilesFile) {
+function runDetectCommand(manifest, manifestPath, command, changedFilesFile, config, args = {}) {
   const rendered = command.replaceAll("{changedFilesFile}", changedFilesFile);
   validateRenderedCommand(rendered);
   const status = runAndRecord(manifest, manifestPath, rendered, {
+    ...args,
+    configObject: config,
     commandSource: "detect-command",
     note: `changedFilesFile=${changedFilesFile}`,
   });
@@ -441,6 +436,20 @@ function gitStatusFingerprint(paths = []) {
   return sha256(gitStatusText(paths));
 }
 
+function gitStatusTextForEvidence(manifestPath) {
+  const manifestFile = manifestPath ? repoRelative(manifestPath) : null;
+  return gitStatusText()
+    .split("\n")
+    .filter(Boolean)
+    .filter((line) => {
+      const rawPath = line.slice(3).replace(/\\/g, "/");
+      if (manifestFile && rawPath === manifestFile) return false;
+      if (rawPath.startsWith("tmp/apex-workflow/")) return false;
+      return true;
+    })
+    .join("\n");
+}
+
 function existingOwnedFiles(manifest) {
   return normalizeStringArray(manifest.ownedFiles).filter((filePath) => existsSync(resolve(process.cwd(), filePath)));
 }
@@ -449,12 +458,16 @@ function fingerprintPath(filePath) {
   const absolute = resolve(process.cwd(), filePath);
   const stats = statSync(absolute);
   if (stats.isDirectory()) {
+    if (FINGERPRINT_IGNORE_DIRS.has(basename(absolute))) return [`ignored-dir:${filePath}`];
     const children = readdirSync(absolute)
       .sort()
       .flatMap((entry) => fingerprintPath(join(filePath, entry)));
     return [`dir:${filePath}`, ...children];
   }
   if (!stats.isFile()) return [`other:${filePath}`];
+  if (stats.size > FINGERPRINT_MAX_FILE_BYTES) {
+    throw new Error(`freshness input exceeds limit: ${filePath}; configure a narrower verification.freshnessInputs entry`);
+  }
   return [`file:${filePath}:${sha256(readFileSync(absolute))}`];
 }
 
@@ -462,6 +475,56 @@ function ownedFilesFingerprint(manifest) {
   const files = existingOwnedFiles(manifest);
   const entries = files.flatMap((filePath) => fingerprintPath(filePath));
   return sha256(entries.join("\n"));
+}
+
+function existingFreshnessInputs(config) {
+  return normalizeStringArray(config?.verification?.freshnessInputs).filter((filePath) =>
+    existsSync(resolve(process.cwd(), filePath)),
+  );
+}
+
+function freshnessInputsFingerprint(config) {
+  const entries = existingFreshnessInputs(config).flatMap((filePath) => fingerprintPath(filePath));
+  return sha256(entries.join("\n"));
+}
+
+function profileFingerprint(args = {}) {
+  const configPath = args.configPath ?? args.config ?? "apex.workflow.json";
+  const absolute = resolve(process.cwd(), configPath);
+  if (!existsSync(absolute)) return sha256("profile:missing");
+  return sha256(readFileSync(absolute));
+}
+
+function envAllowlistFingerprint(config) {
+  const entries = normalizeStringArray(config?.verification?.envAllowlist).map((key) => {
+    const value = process.env[key] ?? "";
+    return `${key}:${sha256(value)}`;
+  });
+  return sha256(entries.sort().join("\n"));
+}
+
+function makeEvidenceFingerprint(manifest, config, command, args = {}) {
+  const parts = [
+    `ownedFiles=${ownedFilesFingerprint(manifest)}`,
+    `freshnessInputs=${freshnessInputsFingerprint(config)}`,
+    `command=${sha256(command)}`,
+    `profile=${profileFingerprint(args)}`,
+    `gitHead=${gitHead() ?? "none"}`,
+    `gitStatus=${sha256(gitStatusTextForEvidence(args.manifestPath))}`,
+    `env=${envAllowlistFingerprint(config)}`,
+  ];
+  return {
+    evidenceFingerprint: sha256(parts.sort().join("\n")),
+    freshnessInputsFingerprint: parts.find((part) => part.startsWith("freshnessInputs="))?.split("=")[1] ?? sha256(""),
+    profileFingerprint: parts.find((part) => part.startsWith("profile="))?.split("=")[1] ?? sha256(""),
+    commandFingerprint: sha256(command),
+    envFingerprint: parts.find((part) => part.startsWith("env="))?.split("=")[1] ?? sha256(""),
+    fingerprintInputs: {
+      ownedFiles: existingOwnedFiles(manifest),
+      freshnessInputs: existingFreshnessInputs(config),
+      envAllowlist: normalizeStringArray(config?.verification?.envAllowlist),
+    },
+  };
 }
 
 function builtInDetect(manifest, manifestPath, args = {}) {
@@ -541,9 +604,14 @@ function runDetect(args, config, options = {}) {
     return { ok: false, status: 1, manifest, filePath, failures };
   }
 
-  const outputPath = join("/tmp", `apex-workflow-files-${Date.now()}.txt`);
+  const outputPath = resolveInsideRoot(
+    process.cwd(),
+    join("tmp/apex-workflow/detect", `${makeRunId("changed-files")}.txt`),
+    { label: "changed-files handoff", file: true },
+  ).absolute;
+  mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${manifest.ownedFiles.join("\n")}\n`);
-  console.error(`[apex-manifest] changed-files list: ${outputPath}`);
+  console.error(`[apex-manifest] changed-files list: ${repoRelative(outputPath)}`);
 
   const builtInResult = builtInDetect(manifest, filePath, args);
   printBuiltInDetect(builtInResult);
@@ -561,7 +629,8 @@ function runDetect(args, config, options = {}) {
     return { ok: true, status: 0, manifest, filePath, failures: [] };
   }
 
-  const detectStatus = runDetectCommand(manifest, filePath, detectCommand, outputPath);
+  const detectStatus = runDetectCommand(manifest, filePath, detectCommand, outputPath, config, args);
+  if (detectStatus === 0) rmSync(outputPath, { force: true });
   writeManifest(filePath, manifest);
   return {
     ok: builtInResult.ok && detectStatus === 0,
@@ -715,7 +784,7 @@ function commandFinish(args, config) {
   const output = [`# Finish Packet`, "", ...labels.flatMap((label) => [`## ${label}`, finishValue(label, manifest, config, args), ""])].join("\n");
 
   if (args.out) {
-    const outPath = resolve(process.cwd(), String(args.out));
+    const outPath = resolveInsideRoot(process.cwd(), String(args.out), { label: "finish packet output", file: true }).absolute;
     mkdirSync(dirname(outPath), { recursive: true });
     writeFileSync(outPath, output.endsWith("\n") ? output : `${output}\n`);
     console.log(`[apex-manifest] wrote ${repoPath(outPath)}`);
@@ -735,6 +804,12 @@ function makeRunRecord(manifest, manifestPath, command, status, exitCode, starte
   if (!RUN_SOURCES.has(commandSource)) {
     throw new Error(`commandSource must be one of: ${[...RUN_SOURCES].join(", ")}`);
   }
+  const evidence = options.config
+    ? makeEvidenceFingerprint(manifest, options.config, command, {
+        ...options,
+        manifestPath,
+      })
+    : {};
   return {
     id: String(options.id ?? nextRunId(manifest)),
     command,
@@ -746,9 +821,14 @@ function makeRunRecord(manifest, manifestPath, command, status, exitCode, starte
     durationMs,
     cwd: ".",
     shell: true,
+    timeoutMs: options.timeoutMs ?? null,
+    timedOut: Boolean(options.timedOut),
+    signal: options.signal ?? null,
+    outputTruncated: Boolean(options.outputTruncated),
     gitHead: gitHead(),
     gitStatusFingerprint: gitStatusFingerprint(),
     ownedFilesFingerprint: ownedFilesFingerprint(manifest),
+    ...evidence,
     stdoutTail: tail(options.stdout ?? ""),
     stderrTail: tail(options.stderr ?? ""),
     logPath: options.logPath ?? null,
@@ -758,8 +838,7 @@ function makeRunRecord(manifest, manifestPath, command, status, exitCode, starte
 }
 
 function nextRunId(manifest) {
-  const existing = checkRuns(manifest).length + 1;
-  return `run-${timestampIdPart()}-${String(existing).padStart(3, "0")}`;
+  return makeRunId("run");
 }
 
 function writeRunLog(logPath, record, stdout, stderr) {
@@ -897,11 +976,10 @@ function latestPassedRun(manifest, command) {
   return [...checkRuns(manifest)].reverse().find((run) => run.command === command && run.status === "passed");
 }
 
-function validateRequiredEvidenceFreshness(manifest, args = {}) {
+function validateRequiredEvidenceFreshness(manifest, config, args = {}) {
   const failures = [];
   const required = normalizeStringArray(manifest.checks?.required);
   if (required.length === 0) return failures;
-  const currentOwned = ownedFilesFingerprint(manifest);
 
   for (const command of required) {
     const run = latestPassedRun(manifest, command);
@@ -909,7 +987,14 @@ function validateRequiredEvidenceFreshness(manifest, args = {}) {
       failures.push(`required check has no passing evidence: ${command}`);
       continue;
     }
-    if (run.ownedFilesFingerprint !== currentOwned) {
+    const current = makeEvidenceFingerprint(manifest, config, command, {
+      ...args,
+      manifestPath: manifest.__filePath,
+      configPath: args.config ?? "apex.workflow.json",
+    }).evidenceFingerprint;
+    if (!run.evidenceFingerprint) {
+      failures.push(`required check evidence is legacy and must be rerun: ${command}`);
+    } else if (run.evidenceFingerprint !== current) {
       failures.push(`required check evidence is stale: ${command}`);
     }
   }
@@ -930,25 +1015,33 @@ function validateRequiredEvidenceFreshness(manifest, args = {}) {
 
 function runAndRecord(manifest, manifestPath, command, args = {}) {
   validateRenderedCommand(command);
-  const started = Date.now();
-  const startedAt = new Date(started).toISOString();
-  const result = runShell(command, { inherit: false });
-  const finishedAt = new Date().toISOString();
-  const durationMs = Date.now() - started;
-  const status = result.status === 0 ? "passed" : "failed";
   const runId = nextRunId(manifest);
   const logPath = logPathForRun(manifestPath, runId);
-  const record = makeRunRecord(manifest, manifestPath, command, status, result.status, startedAt, finishedAt, durationMs, {
+  const result = runTrustedCommand(command, {
+    cwd: process.cwd(),
+    commandSource: args.commandSource ?? "manual-run-check",
+    timeoutMs: args["timeout-ms"] ?? args.timeoutMs,
+    logPath,
+  });
+  const status = result.status === 0 ? "passed" : "failed";
+  const record = makeRunRecord(manifest, manifestPath, result.command, status, result.status, result.startedAt, result.finishedAt, result.durationMs, {
     id: runId,
     commandSource: args.commandSource ?? "manual-run-check",
     stdout: result.stdout,
     stderr: result.stderr,
     logPath,
+    logSha256: result.logSha256,
+    timeoutMs: result.timeoutMs,
+    timedOut: result.timedOut,
+    signal: result.signal,
+    outputTruncated: result.outputTruncated,
+    config: args.configObject,
+    configPath: args.config ?? "apex.workflow.json",
     note: args.note ?? "",
   });
-  record.logSha256 = writeRunLog(logPath, record, result.stdout, result.stderr);
+  record.logSha256 = result.logSha256;
   appendRun(manifest, record);
-  console.log(`[apex-manifest] ${status}: ${command} (${logPath})`);
+  console.log(`[apex-manifest] ${status}: ${result.command} (${logPath})`);
   if (result.stderr && status === "failed") console.error(tail(result.stderr, 1200));
   return result.status;
 }
@@ -1016,7 +1109,7 @@ function commandRunCheck(args, config) {
   const manifest = readManifest(filePath);
   const command = args.cmd ?? args.command;
   if (!command) throw new Error("--cmd is required");
-  const status = runAndRecord(manifest, filePath, String(command), { ...args, commandSource: "manual-run-check" });
+  const status = runAndRecord(manifest, filePath, String(command), { ...args, configObject: config, commandSource: "manual-run-check" });
   writeManifest(filePath, manifest);
   process.exit(status);
 }
@@ -1035,6 +1128,8 @@ function commandRecordCheck(args, config) {
     manifest,
     makeRunRecord(manifest, filePath, String(command), status, exitCode, now, now, 0, {
       commandSource: "manual-record-check",
+      config,
+      configPath: args.config ?? "apex.workflow.json",
       note: String(args.note ?? ""),
     }),
   );
@@ -1070,14 +1165,16 @@ function commandClose(args, config) {
 
   if (!args["skip-required"]) {
     for (const command of manifest.checks?.required ?? []) {
-      const status = runAndRecord(manifest, filePath, command, { ...args, commandSource: "close-required" });
+      const status = runAndRecord(manifest, filePath, command, { ...args, configObject: config, commandSource: "close-required" });
       writeManifest(filePath, manifest);
       if (status !== 0) hadFailure = true;
       if (status !== 0 && !args["keep-going"]) process.exit(status);
     }
   }
 
-  const staleEvidenceFailures = validateRequiredEvidenceFreshness(manifest, args);
+  manifest.__filePath = filePath;
+  const staleEvidenceFailures = validateRequiredEvidenceFreshness(manifest, config, args);
+  delete manifest.__filePath;
   writeManifest(filePath, manifest);
   if (staleEvidenceFailures.length > 0) {
     console.error("[apex-manifest] stale required evidence; refusing close:");
@@ -1088,7 +1185,7 @@ function commandClose(args, config) {
 
   const diffCommand = dirtyPolicy === "owned-files-only" ? ownedDiffCheckCommand(manifest) : "git diff --check";
   if (diffCommand) {
-    const diffStatus = runAndRecord(manifest, filePath, diffCommand, { ...args, commandSource: "close-diff" });
+    const diffStatus = runAndRecord(manifest, filePath, diffCommand, { ...args, configObject: config, commandSource: "close-diff" });
     writeManifest(filePath, manifest);
     if (diffStatus !== 0) hadFailure = true;
     if (diffStatus !== 0 && !args["keep-going"]) process.exit(diffStatus);
@@ -1106,6 +1203,8 @@ function commandClose(args, config) {
         0,
         {
           commandSource: "close-diff",
+          config,
+          configPath: args.config ?? "apex.workflow.json",
           note: "dirtyPolicy=owned-files-only and no ownedFiles were listed",
         },
       ),

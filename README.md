@@ -28,6 +28,18 @@ Apex commands run shell commands declared in the profile, manifest, or CLI
 arguments. Read [SECURITY.md](SECURITY.md) before installing Apex into an
 unfamiliar repository or running manifests from another source.
 
+## Remote Policy
+
+Apex requires a normal Git repo and uses `origin` as the working remote when
+GitHub-backed workflows are needed.
+
+A local `upstream` remote is optional. Apex must not fail install, doctor,
+manifest creation, verification, close, or finish-packet generation because
+`upstream` is missing.
+
+`upstream` is only relevant for explicit parent-sync, fork-drift comparison, or
+contributing changes back to a parent repository.
+
 ## Architecture
 
 ```text
@@ -286,8 +298,11 @@ apex-manifest run-check \
 ```
 
 Command runs are recorded in `checks.runs` with command source, exit code,
-timestamps, cwd, git head, working-tree fingerprints, stdout/stderr tails, and
-a hashed log file under `tmp/apex-workflow/logs/<slice>/`.
+timestamps, cwd, git head, evidence fingerprints, stdout/stderr tails, timeout
+metadata, and a hashed log file under `tmp/apex-workflow/logs/<slice>/`.
+Command output and persisted command strings are redacted for common token
+shapes. The default command timeout is 120000 ms; override it per run with
+`--timeout-ms=<milliseconds>` when a legitimate check needs longer.
 
 Record manual terminal, TUI, or operator evidence without pretending it was an
 automated check:
@@ -421,6 +436,11 @@ npm run self-check
 fixture and uses temporary fixture repos instead of any private target app.
 Private app profile validation belongs in guarded scripts such as
 `MINTY_TARGET=/path/to/private/repo npm run check:minty`.
+
+## License
+
+Apex Workflow is released under the [MIT License](LICENSE). The package remains
+private and is not configured for npm publishing.
 
 ## The Philosophy
 

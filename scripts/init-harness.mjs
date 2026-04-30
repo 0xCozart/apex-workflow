@@ -3,10 +3,12 @@
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  cpSync,
   lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -14,6 +16,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
@@ -54,6 +57,7 @@ Options:
   --skip-agents                   Do not create/update AGENTS.md.
   --skip-skill-link               Do not symlink the local skill.
   --force                         Overwrite existing apex.workflow.json and managed AGENTS block.
+  --no-rollback                   Leave partial writes in place if install fails.
   --dry-run                       Print what would be written.
   --yes                           Non-interactive; accept inferred/default values.
 `;
@@ -503,6 +507,8 @@ function inferVerification(targetRoot, pkg, args) {
     focusedChecksFirst: true,
     requiredCommands,
     optionalCommands: [...new Set(optionalCommands)],
+    freshnessInputs: ["package.json", "package-lock.json"].filter((filePath) => existsSync(join(targetRoot, filePath))),
+    envAllowlist: [],
     knownFailures: firstExisting(targetRoot, [
       "docs/runbooks/known-verification-failures.md",
       "docs/known-verification-failures.md",
@@ -779,8 +785,65 @@ function installSkillLink(args) {
     rmSync(linkPath, { recursive: true, force: true });
   }
 
-  symlinkSync(SKILL_SOURCE, linkPath, "dir");
+  symlinkSync(SKILL_SOURCE, linkPath, skillSymlinkType());
   return { skipped: false, path: linkPath };
+}
+
+function skillSymlinkType() {
+  return process.platform === "win32" ? "junction" : "dir";
+}
+
+function skillLinkPath(args) {
+  const skillRoot = args["skill-dir"]
+    ? resolve(process.cwd(), String(args["skill-dir"]))
+    : join(process.env.CODEX_HOME ? resolve(process.env.CODEX_HOME) : join(homedir(), ".codex"), "skills");
+  return join(skillRoot, "apex-workflow");
+}
+
+function backupPath(filePath) {
+  if (!existsSync(filePath)) return { path: filePath, type: "missing" };
+  const stat = lstatSync(filePath);
+  if (stat.isSymbolicLink()) {
+    return { path: filePath, type: "symlink", target: readlinkSync(filePath) };
+  }
+  if (stat.isDirectory()) {
+    const backup = join(tmpdir(), `apex-init-backup-${process.pid}-${Date.now()}-${basename(filePath)}`);
+    cpSync(filePath, backup, { recursive: true, verbatimSymlinks: true });
+    return { path: filePath, type: "directory", backup };
+  }
+  return { path: filePath, type: "file", content: readFileSync(filePath) };
+}
+
+function restoreBackup(backup) {
+  rmSync(backup.path, { recursive: true, force: true });
+  if (backup.type === "missing") return;
+  mkdirSync(dirname(backup.path), { recursive: true });
+  if (backup.type === "file") writeFileSync(backup.path, backup.content);
+  if (backup.type === "symlink") symlinkSync(backup.target, backup.path, skillSymlinkType());
+  if (backup.type === "directory") cpSync(backup.backup, backup.path, { recursive: true, verbatimSymlinks: true });
+}
+
+function collectInstallBackups(targetRoot, args) {
+  const paths = [
+    join(targetRoot, "apex.workflow.json"),
+    join(targetRoot, "AGENTS.md"),
+    join(targetRoot, ".gitignore"),
+    join(targetRoot, DEFAULT_CODEBASE_MAP_PATH),
+  ];
+  if (!args["skip-skill-link"]) paths.push(skillLinkPath(args));
+  return paths.map(backupPath);
+}
+
+function rollbackInstall(backups) {
+  const errors = [];
+  for (const backup of [...backups].reverse()) {
+    try {
+      restoreBackup(backup);
+    } catch (error) {
+      errors.push(`${backup.path}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return errors;
 }
 
 function validateGeneratedConfig(targetRoot) {
@@ -794,7 +857,7 @@ function validateGeneratedConfig(targetRoot) {
   );
 
   if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  if (result.status !== 0) throw new Error(`generated profile validation failed with exit ${result.status ?? 1}`);
 }
 
 function createCodebaseMap(targetRoot, args) {
@@ -943,20 +1006,39 @@ async function main() {
   const config = await buildConfig(targetRoot, args);
   const rendered = `${JSON.stringify(config, null, 2)}\n`;
 
-  if (args["dry-run"]) {
-    console.log(`[apex-init] would write ${configPath}`);
-    console.log(rendered);
-  } else {
-    writeFileSync(configPath, rendered);
+  let backups = [];
+  try {
+    if (args["dry-run"]) {
+      console.log(`[apex-init] would write ${configPath}`);
+      console.log(rendered);
+    } else {
+      backups = collectInstallBackups(targetRoot, args);
+      writeFileSync(configPath, rendered);
+    }
+
+    const mapResult = createCodebaseMap(targetRoot, args);
+    const agentsResult = upsertAgentsBlock(targetRoot, args);
+    upsertGitignoreBlock(targetRoot, args);
+    const skillResult = installSkillLink(args);
+
+    if (process.env.APEX_INIT_FAIL_AFTER_COMMIT || args["simulate-late-failure"]) {
+      throw new Error("simulated late init failure");
+    }
+
+    if (!args["dry-run"]) validateGeneratedConfig(targetRoot);
+    printSummary({ targetRoot, configPath, agentsResult, skillResult, mapResult, dryRun: Boolean(args["dry-run"]), config });
+  } catch (error) {
+    if (!args["dry-run"] && !args["no-rollback"]) {
+      const rollbackErrors = rollbackInstall(backups);
+      if (rollbackErrors.length > 0) {
+        console.error("[apex-init] rollback errors:");
+        for (const rollbackError of rollbackErrors) console.error(`- ${rollbackError}`);
+      } else {
+        console.error("[apex-init] rolled back partial install");
+      }
+    }
+    throw error;
   }
-
-  const mapResult = createCodebaseMap(targetRoot, args);
-  const agentsResult = upsertAgentsBlock(targetRoot, args);
-  upsertGitignoreBlock(targetRoot, args);
-  const skillResult = installSkillLink(args);
-
-  if (!args["dry-run"]) validateGeneratedConfig(targetRoot);
-  printSummary({ targetRoot, configPath, agentsResult, skillResult, mapResult, dryRun: Boolean(args["dry-run"]), config });
 }
 
 main().catch((error) => {

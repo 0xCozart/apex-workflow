@@ -109,16 +109,20 @@ export function evaluateCodebaseMap(text, options = {}) {
 
 export function setCodebaseMapReviewed(text) {
   const statusPattern = /^Status:\s*.*$/im;
+  const reviewedAt = `Reviewed at: ${new Date().toISOString()}`;
+  const withReviewedAt = /^Reviewed at:\s*.*$/im.test(text)
+    ? text.replace(/^Reviewed at:\s*.*$/im, reviewedAt)
+    : text.replace(/^Status:\s*.*$/im, (match) => `${match}\n${reviewedAt}`);
   if (statusPattern.test(text)) {
-    return text.replace(statusPattern, "Status: reviewed");
+    return withReviewedAt.replace(statusPattern, "Status: reviewed");
   }
 
   const h1Pattern = /^#\s+Codebase Map\s*$/im;
   if (h1Pattern.test(text)) {
-    return text.replace(h1Pattern, (match) => `${match}\n\nStatus: reviewed`);
+    return text.replace(h1Pattern, (match) => `${match}\n\nStatus: reviewed\n${reviewedAt}`);
   }
 
-  return `# Codebase Map\n\nStatus: reviewed\n\n${text}`;
+  return `# Codebase Map\n\nStatus: reviewed\n${reviewedAt}\n\n${text}`;
 }
 
 function countOccurrences(text, pattern) {

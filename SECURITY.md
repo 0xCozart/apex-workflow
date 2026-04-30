@@ -46,5 +46,7 @@ Secrets should never be stored in:
 - finish packets
 - copied terminal output
 
-Manifest command logs redact common secret-like values and cap manifest output
-tails. Apex does not record environment dumps by default.
+Manifest command logs redact common secret-like values, cap manifest output
+tails, and record command timeouts. Apex does not record environment dumps by
+default. If `verification.envAllowlist` is configured, Apex fingerprints the
+selected values for freshness without storing raw environment values.

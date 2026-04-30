@@ -163,6 +163,8 @@
         "focusedChecksFirst": { "type": "boolean" },
         "requiredCommands": { "type": "array", "items": { "type": "string" } },
         "optionalCommands": { "type": "array", "items": { "type": "string" } },
+        "freshnessInputs": { "type": "array", "items": { "type": "string" } },
+        "envAllowlist": { "type": "array", "items": { "type": "string" } },
         "knownFailures": { "type": ["string", "null"] },
         "browser": {
           "type": "object",
