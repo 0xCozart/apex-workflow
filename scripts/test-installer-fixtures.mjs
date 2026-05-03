@@ -608,6 +608,11 @@ function testGitNexusFreshnessGate(root) {
   );
 
   run(
+    [join(APEX_ROOT, "scripts/apex-manifest.mjs"), "check", "--config=apex.workflow.json", "--slug=freshness-slice"],
+    { cwd: target },
+  );
+
+  run(
     [
       join(APEX_ROOT, "scripts/apex-manifest.mjs"),
       "close",

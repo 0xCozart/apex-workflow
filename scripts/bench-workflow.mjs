@@ -146,7 +146,14 @@ function standardCodeScenario(root, scenario, mode, options = {}) {
   const target = initTarget(root, "no-adapters", scenario, ["--code-intelligence=focused-search"]);
   const slug = scenario;
   newManifest(target, slug, mode, options);
-  writeFileSync(join(target, "PRODUCT.md"), `# Product\n\nBenchmark update for ${scenario}.\n`);
+  if (options.updateConfig) {
+    const configPath = join(target, "apex.workflow.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    config.notes = `Benchmark shared-surface update for ${scenario}.`;
+    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  } else {
+    writeFileSync(join(target, "PRODUCT.md"), `# Product\n\nBenchmark update for ${scenario}.\n`);
+  }
   const close = closeSlice(target, slug);
   const manifest = readManifest(target, slug);
   const config = readConfig(target);
@@ -334,7 +341,9 @@ function main() {
       standardCodeScenario(root, "tiny-one-file-fix", "tiny"),
       standardCodeScenario(root, "route-local-code-slice", "route-local"),
       standardCodeScenario(root, "shared-surface-change", "shared-surface", {
-        files: "PRODUCT.md,apex.workflow.json",
+        files: "apex.workflow.json",
+        surface: "fixture Apex profile shared surface",
+        updateConfig: true,
       }),
       dirtyBranchReconciliation(root),
       staleEvidenceInvalidation(root),
