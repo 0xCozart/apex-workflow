@@ -26,7 +26,8 @@
     "manifest": "node scripts/apex-manifest.mjs",
     "test:fixtures": "node scripts/test-installer-fixtures.mjs",
     "test:demo": "node scripts/demo-smoke.mjs",
-    "self-check": "npm run format:check && npm run check:syntax && npm run check:portability && npm run check:config && npm run test:fixtures && npm run test:demo"
+    "self-check": "npm run format:check && npm run check:syntax && npm run check:portability && npm run check:config && npm run test:fixtures && npm run test:demo",
+    "hardening-check": "npm run self-check && npm run check:security && npm run check:supply-chain && npm run bench:workflow"
   },
   "dependencies": {
     "ajv": "8.20.0"

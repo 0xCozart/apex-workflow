@@ -19,11 +19,14 @@ npm run check:security
 npm run check:supply-chain
 npm run bench:workflow
 npm run self-check
+npm run hardening-check
 git diff --check
 ```
 
-Run focused commands earlier while developing. `npm run self-check` is the final local gate, not a substitute for
-understanding the affected surface.
+Run focused commands earlier while developing. `npm run self-check` is the fast clean-room core gate.
+`npm run hardening-check` is the final local hardening gate for shared-surface, security-sensitive, schema, fixture, CI,
+and benchmark changes; it runs `self-check`, `check:security`, `check:supply-chain`, and `bench:workflow`. Neither
+command is a substitute for understanding the affected surface.
 
 ## Pull Request Expectations
 
@@ -37,6 +40,9 @@ Every non-trivial PR should state:
 
 Tiny documentation or comment-only changes may use a smaller verification set, but the PR must say why the smaller set
 is enough.
+
+`.github/CODEOWNERS` documents review ownership for shared surfaces. GitHub only enforces that ownership when branch
+protection has "Require review from Code Owners" enabled for the protected branch.
 
 ## Human And Agent Protocol
 
