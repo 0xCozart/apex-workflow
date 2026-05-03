@@ -147,8 +147,9 @@ shapes from persisted command strings, tails, and logs. The default command time
 `--timeout-ms=<milliseconds>` for a known longer-running trusted check.
 
 Profiles may opt into stricter command execution under `security.commandPolicy`. The default is `trusted-shell`. Use
-`allowlisted-shell` for reviewed command patterns or `restricted-shell` to block configured shell tokens. Preview close
-commands before running unfamiliar profiles:
+`allowlisted-shell` for reviewed command patterns or `restricted-shell` to block configured shell tokens.
+`exec-array-only` is schema-supported future strict mode; current Apex command surfaces still pass raw shell strings, so
+that mode blocks execution instead of running checks. Preview close commands before running unfamiliar profiles:
 
 ```bash
 apex-manifest close --config=apex.workflow.json --slug=app-123-slice --preview-commands

@@ -238,7 +238,7 @@ function checkCommandPolicy(checks, config) {
       checks,
       "warn",
       "command policy",
-      "exec-array-only is schema-supported but raw command execution is not yet supported",
+      "exec-array-only is schema-supported future strict mode; current raw shell command execution is blocked",
     );
     return;
   }
