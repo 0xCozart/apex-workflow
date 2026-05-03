@@ -91,7 +91,9 @@ npm run check:supply-chain
 GitHub automation includes:
 
 - Dependabot updates for npm dependencies and GitHub Actions.
-- `.github/workflows/security.yml` for npm audit, SBOM generation, and CodeQL analysis.
+- `.github/workflows/security.yml` for npm audit, SBOM generation, and CodeQL analysis. Dependency and SBOM checks run
+  on pull requests with `contents: read`; CodeQL runs on push and schedule with `security-events: write` so fork pull
+  requests do not fail because they cannot upload security events.
 
 When reviewing dependency or security update PRs:
 

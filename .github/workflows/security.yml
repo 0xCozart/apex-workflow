@@ -2,11 +2,12 @@ name: security
 
 on:
   push:
+  schedule:
+    - cron: "27 10 * * 1"
   pull_request:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   dependency-supply-chain:
@@ -33,6 +34,10 @@ jobs:
 
   codeql:
     name: CodeQL
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    permissions:
+      contents: read
+      security-events: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
