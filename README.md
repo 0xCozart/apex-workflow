@@ -414,9 +414,12 @@ apex-workflow/
   profiles/minty.workflow.json      extracted production profile
   profiles/service-desk.workflow.json non-Minty example profile
   schemas/apex.workflow.schema.json profile schema
+  schemas/apex.manifest.schema.json slice manifest schema
+  benchmarks/workflow-fixtures.json workflow benchmark scenarios and thresholds
   scripts/init-harness.mjs          target repo installer
   scripts/apex-doctor.mjs           readiness checker
   scripts/apex-manifest.mjs         slice manifest lifecycle
+  scripts/bench-workflow.mjs        no-service workflow outcome benchmark
   scripts/check-config.mjs          profile validator
   scripts/test-installer-fixtures.mjs fixture regression tests
   skills/apex-workflow/SKILL.md     Codex skill entrypoint
@@ -431,12 +434,25 @@ npm run check:syntax
 npm run check:portability
 npm run check:config
 npm run test:fixtures
+npm run test:demo
 npm run self-check
 ```
 
 `self-check` is clean-room runnable: it validates the repo-local service-desk fixture and uses temporary fixture repos
 instead of any private target app. Private app profile validation belongs in guarded scripts such as
 `MINTY_TARGET=/path/to/private/repo npm run check:minty`.
+
+Security and outcome checks are separate from the fast local loop:
+
+```bash
+npm run check:security
+npm run check:supply-chain
+npm run bench:workflow
+```
+
+The workflow benchmark writes machine-readable output to `tmp/apex-workflow/workflow-benchmark.json` and fails on scope
+escapes, missing verification evidence, incomplete finish packets, stale-evidence misses, dirty-branch false failures,
+or unrecoverable resume state.
 
 ## License
 

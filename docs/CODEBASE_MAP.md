@@ -7,7 +7,8 @@ Status: reviewed Reviewed at: 2026-04-30T00:00:00.000Z
 - `.github/workflows/ci.yml`: public verification workflow.
 - `scripts/`: Node ESM CLI control plane.
 - `scripts/lib/`: shared helpers used by CLI scripts.
-- `schemas/`: Apex workflow profile schema.
+- `schemas/`: Apex workflow profile and slice manifest schemas.
+- `benchmarks/`: no-service workflow benchmark scenarios and metric thresholds.
 - `templates/`: default target-repo profile template.
 - `profiles/`: example and extracted profiles used for validation.
 - `fixtures/`: config and installer regression targets.
@@ -20,6 +21,7 @@ Status: reviewed Reviewed at: 2026-04-30T00:00:00.000Z
 - `scripts/check-config.mjs` owns schema and target path validation.
 - `scripts/apex-doctor.mjs` owns readiness checks.
 - `scripts/apex-manifest.mjs` owns slice manifests, evidence, close, and finish packets.
+- `scripts/bench-workflow.mjs` owns workflow outcome benchmarks.
 - `scripts/apex-map-codebase.mjs` owns generated codebase-map scaffolds.
 - `scripts/test-installer-fixtures.mjs` is the broad fixture harness for control-plane behavior.
 
@@ -27,7 +29,8 @@ Status: reviewed Reviewed at: 2026-04-30T00:00:00.000Z
 
 - Installer domain: profile inference, managed `AGENTS.md`, managed `.gitignore`, codebase map handoff, skill linking.
 - Manifest domain: slice scope, dirty-file detection, verification evidence, GitNexus freshness, finish packets.
-- Validation domain: JSON schema, exact target path checks, portability scanning.
+- Validation domain: JSON schemas, exact target path checks, portability scanning.
+- Security and benchmark domain: supply-chain checks, command policy, and workflow outcome measurement.
 - Documentation domain: README, adoption guide, quickstart, security model, and agent skill instructions.
 
 ## Routes, Commands, And Entry Points
@@ -37,6 +40,7 @@ Status: reviewed Reviewed at: 2026-04-30T00:00:00.000Z
 - `apex-manifest`: `scripts/apex-manifest.mjs`
 - `apex-check-config`: `scripts/check-config.mjs`
 - `apex-map-codebase`: `scripts/apex-map-codebase.mjs`
+- Workflow benchmark: `npm run bench:workflow`
 - Maintainer checks: `npm run check:syntax`, `npm run check:portability`, `npm run check:config`,
   `npm run test:fixtures`, `npm run test:demo`, `npm run self-check`
 
@@ -59,7 +63,8 @@ Status: reviewed Reviewed at: 2026-04-30T00:00:00.000Z
 ## Risk And Coupling Areas
 
 - Path resolution must stay repo-bound for target artifacts while allowing maintainer profile validation.
-- Command execution is trusted but must be timed, capped, logged, and redacted.
+- Command execution is trusted by default but can be narrowed by `security.commandPolicy`; it must be timed, capped,
+  logged, and redacted.
 - Evidence freshness must avoid both false freshness and self-invalidating Apex artifact churn.
 - Installer rollback must preserve existing target repo files and skill links.
 - Windows path separators and case-sensitive/case-insensitive filesystem differences affect CI reliability.
@@ -71,6 +76,8 @@ Status: reviewed Reviewed at: 2026-04-30T00:00:00.000Z
 - Profile/schema/template changes: `npm run check:config`.
 - Installer, manifest, doctor, map, and evidence behavior: `npm run test:fixtures`.
 - Quickstart/no-service flow: `npm run test:demo`.
+- Workflow quality metrics: `npm run bench:workflow`.
+- Security and supply-chain checks: `npm run check:security` and `npm run check:supply-chain`.
 - Final local gate: `npm run self-check` and `git diff --check`.
 
 ## Generated Or Ignored Paths

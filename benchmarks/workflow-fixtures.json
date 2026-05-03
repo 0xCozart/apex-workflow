@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "metrics": {
+    "scopeEscapeRate": { "target": 0 },
+    "verificationCaptureRate": { "target": 0.95 },
+    "finishPacketCompleteness": { "target": 0.95 },
+    "staleEvidenceDetection": { "target": 1 },
+    "dirtyBranchFalseFailureRate": { "target": 0 },
+    "resumeCompleteness": { "target": 0.95 }
+  },
+  "scenarios": [
+    "tiny-one-file-fix",
+    "route-local-code-slice",
+    "shared-surface-change",
+    "dirty-branch-reconciliation",
+    "stale-evidence-invalidation",
+    "gitnexus-wrapper-freshness-gate",
+    "browser-skip-disposition",
+    "missing-contract-fallback"
+  ]
+}

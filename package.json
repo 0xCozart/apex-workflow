@@ -13,9 +13,12 @@
   "scripts": {
     "format": "prettier --write \"**/*.{js,mjs,json,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{js,mjs,json,md,yml,yaml}\"",
-    "check:syntax": "node --check scripts/init-harness.mjs && node --check scripts/apex-doctor.mjs && node --check scripts/apex-manifest.mjs && node --check scripts/check-config.mjs && node --check scripts/check-portability.mjs && node --check scripts/apex-map-codebase.mjs && node --check scripts/lib/codebase-map.mjs && node --check scripts/lib/paths.mjs && node --check scripts/lib/redact.mjs && node --check scripts/lib/runner.mjs && node --check scripts/lib/manifest-store.mjs && node --check scripts/demo-smoke.mjs && node --check scripts/test-installer-fixtures.mjs",
+    "check:syntax": "node --check scripts/init-harness.mjs && node --check scripts/apex-doctor.mjs && node --check scripts/apex-manifest.mjs && node --check scripts/check-config.mjs && node --check scripts/check-portability.mjs && node --check scripts/apex-map-codebase.mjs && node --check scripts/lib/codebase-map.mjs && node --check scripts/lib/paths.mjs && node --check scripts/lib/redact.mjs && node --check scripts/lib/runner.mjs && node --check scripts/lib/manifest-store.mjs && node --check scripts/bench-workflow.mjs && node --check scripts/demo-smoke.mjs && node --check scripts/generate-sbom.mjs && node --check scripts/test-installer-fixtures.mjs",
     "check:portability": "node scripts/check-portability.mjs",
     "check:config": "node scripts/check-config.mjs --config=profiles/service-desk.workflow.json --target=fixtures/config/service-desk --allow-outside-config",
+    "check:security": "npm audit --audit-level=moderate",
+    "check:supply-chain": "node scripts/generate-sbom.mjs",
+    "bench:workflow": "node scripts/bench-workflow.mjs",
     "check:minty": "node -e \"if (!process.env.MINTY_TARGET) { console.error('MINTY_TARGET is required for check:minty'); process.exit(1); }\" && node scripts/check-config.mjs --config=profiles/minty.workflow.json --target=\"$MINTY_TARGET\"",
     "doctor": "node scripts/apex-doctor.mjs",
     "init": "node scripts/init-harness.mjs",
