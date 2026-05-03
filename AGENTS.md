@@ -2,7 +2,9 @@
 
 This repo is an installable workflow harness.
 
-Read `docs/CODEBASE_MAP.md` for codebase orientation before searching broadly.
+Read `docs/CODEBASE_MAP.md` for codebase orientation before searching broadly. Read `CONTRIBUTING.md` before modifying
+Apex Workflow itself; it defines shared surfaces, verification expectations, and parallel-agent collision rules for this
+repo.
 
 When a user asks you to install or configure Apex Workflow for an app repo, do not stop at copying the skill. Configure
 the target repo with the harness installer.
