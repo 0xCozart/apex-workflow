@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apex-workflow.dev/schemas/apex.manifest.schema.json",
+  "title": "Apex Slice Manifest",
+  "type": "object",
+  "required": [
+    "version",
+    "app",
+    "issue",
+    "mode",
+    "surface",
+    "contracts",
+    "ownedFiles",
+    "noTouch",
+    "scope",
+    "codeIntelligence",
+    "checks",
+    "evidence",
+    "tracker",
+    "downshiftProof",
+    "knownFailures",
+    "notes"
+  ],
+  "properties": {
+    "version": { "const": 1 },
+    "app": { "type": "string", "minLength": 1 },
+    "issue": { "type": "string", "minLength": 1 },
+    "mode": { "type": "string", "minLength": 1 },
+    "surface": { "type": "string", "minLength": 1 },
+    "contracts": { "type": "array", "items": { "type": "string" } },
+    "ownedFiles": { "type": "array", "items": { "type": "string" } },
+    "noTouch": { "type": "array", "items": { "type": "string" } },
+    "scope": {
+      "type": "object",
+      "required": ["dirtyPolicy", "externalDirtyFiles"],
+      "properties": {
+        "dirtyPolicy": { "type": "string", "enum": ["fail-unowned", "owned-files-only"] },
+        "externalDirtyFiles": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "codeIntelligence": {
+      "type": "object",
+      "required": ["provider", "impacts", "detect", "freshness"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "impacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["target", "risk", "notes"],
+            "properties": {
+              "target": { "type": "string" },
+              "risk": { "type": "string" },
+              "notes": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        },
+        "detect": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["provider", "checkedAt", "ok"],
+              "properties": {
+                "provider": { "type": "string", "minLength": 1 },
+                "checkedAt": { "type": "string", "minLength": 1 },
+                "ok": { "type": "boolean" },
+                "changedFiles": { "type": "array", "items": { "type": "string" } },
+                "ownedFiles": { "type": "array", "items": { "type": "string" } },
+                "unownedChangedFiles": { "type": "array", "items": { "type": "string" } },
+                "externalDirtyFiles": { "type": "array", "items": { "type": "string" } },
+                "missingOwnedFiles": { "type": "array", "items": { "type": "string" } },
+                "warnings": { "type": "array", "items": { "type": "string" } },
+                "failures": { "type": "array", "items": { "type": "string" } }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "freshness": {
+          "type": "object",
+          "required": ["preSliceStatus", "preSliceRefresh", "postSliceRefresh", "postSliceSkipReason"],
+          "properties": {
+            "preSliceStatus": { "$ref": "#/$defs/freshnessRecordOrNull" },
+            "preSliceRefresh": { "$ref": "#/$defs/freshnessRecordOrNull" },
+            "postSliceRefresh": { "$ref": "#/$defs/freshnessRecordOrNull" },
+            "postSliceSkipReason": {
+              "anyOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "required": ["reason", "graphRelevant", "recordedAt"],
+                  "properties": {
+                    "reason": { "type": "string", "minLength": 1 },
+                    "graphRelevant": { "type": "boolean" },
+                    "recordedAt": { "type": "string", "minLength": 1 }
+                  },
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "checks": {
+      "type": "object",
+      "required": ["required", "optional", "browser", "typecheck", "runs"],
+      "properties": {
+        "required": { "type": "array", "items": { "type": "string" } },
+        "optional": { "type": "array", "items": { "type": "string" } },
+        "browser": { "type": "string", "minLength": 1 },
+        "typecheck": { "type": "string", "minLength": 1 },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["command", "commandSource", "status"],
+            "properties": {
+              "id": { "type": "string" },
+              "command": { "type": "string", "minLength": 1 },
+              "commandSource": { "type": "string", "minLength": 1 },
+              "status": { "type": "string", "enum": ["passed", "failed", "skipped"] },
+              "exitCode": { "type": ["integer", "null"] },
+              "startedAt": { "type": "string" },
+              "finishedAt": { "type": "string" },
+              "durationMs": { "type": "number" },
+              "cwd": { "type": "string" },
+              "shell": { "type": "boolean" },
+              "timedOut": { "type": "boolean" },
+              "logPath": { "type": ["string", "null"] },
+              "logSha256": { "type": ["string", "null"] },
+              "note": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "summary", "recordedAt"],
+        "properties": {
+          "kind": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 },
+          "source": { "type": "string" },
+          "note": { "type": "string" },
+          "recordedAt": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "tracker": {
+      "type": "object",
+      "required": ["provider", "disposition", "id"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "disposition": { "type": "string", "minLength": 1 },
+        "id": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "downshiftProof": { "type": "string", "minLength": 1 },
+    "knownFailures": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "string" }
+  },
+  "$defs": {
+    "freshnessRecordOrNull": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["status", "command", "note", "refreshRequired", "graphRelevant", "recordedAt"],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["fresh", "stale", "missing", "unavailable", "refreshed", "skipped"]
+            },
+            "command": { "type": "string" },
+            "note": { "type": "string" },
+            "refreshRequired": { "type": "boolean" },
+            "graphRelevant": { "type": "boolean" },
+            "recordedAt": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": true
+        }
+      ]
+    }
+  },
+  "additionalProperties": true
+}

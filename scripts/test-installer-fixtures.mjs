@@ -786,6 +786,251 @@ function testSchemaValidation(root) {
   );
 }
 
+function testManifestSchemaValidation(root) {
+  const target = makeTarget(root, "no-adapters", "manifest-schema");
+  const skillDir = join(root, "skills-manifest-schema");
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
+
+  for (const [slug, mode, files] of [
+    ["valid-tiny", "tiny", "PRODUCT.md"],
+    ["valid-route-local", "route-local", "PRODUCT.md"],
+    ["valid-shared-surface", "shared-surface", "PRODUCT.md,apex.workflow.json"],
+  ]) {
+    run(
+      [
+        join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+        "new",
+        "--config=apex.workflow.json",
+        `--slug=${slug}`,
+        "--issue=none",
+        `--mode=${mode}`,
+        "--surface=fixture product doc",
+        `--files=${files}`,
+        `${"--downshift"}=${mode}: fixture schema validation`,
+        "--browser=skip: docs only",
+        "--typecheck=skip: fixture docs only",
+        "--required=node --version",
+      ],
+      { cwd: target },
+    );
+    run([join(APEX_ROOT, "scripts/apex-manifest.mjs"), "check", "--config=apex.workflow.json", `--slug=${slug}`], {
+      cwd: target,
+    });
+  }
+
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=valid-reconciliation",
+      "--issue=none",
+      "--mode=reconciliation",
+      "--surface=fixture reconciliation",
+    ],
+    { cwd: target },
+  );
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "check",
+      "--config=apex.workflow.json",
+      "--slug=valid-reconciliation",
+    ],
+    { cwd: target },
+  );
+
+  const missingOwnedPath = join(target, "tmp/apex-workflow/missing-owned.json");
+  const missingOwned = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/valid-tiny.json"), "utf8"));
+  missingOwned.ownedFiles = [];
+  writeFileSync(missingOwnedPath, `${JSON.stringify(missingOwned, null, 2)}\n`);
+  const missingOwnedCheck = run(
+    [join(APEX_ROOT, "scripts/apex-manifest.mjs"), "check", "--config=apex.workflow.json", "--slug=missing-owned"],
+    { cwd: target, allowFailure: true },
+  );
+  assert(missingOwnedCheck.status !== 0, "code-facing manifest without ownedFiles should fail");
+  assert(
+    `${missingOwnedCheck.stdout}\n${missingOwnedCheck.stderr}`.includes("ownedFiles must list current-slice files"),
+    "missing ownedFiles failure should remain semantic",
+  );
+
+  const invalidTrackerPath = join(target, "tmp/apex-workflow/invalid-tracker.json");
+  const invalidTracker = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/valid-tiny.json"), "utf8"));
+  invalidTracker.tracker.disposition = "done";
+  writeFileSync(invalidTrackerPath, `${JSON.stringify(invalidTracker, null, 2)}\n`);
+  const invalidTrackerCheck = run(
+    [join(APEX_ROOT, "scripts/apex-manifest.mjs"), "check", "--config=apex.workflow.json", "--slug=invalid-tracker"],
+    { cwd: target, allowFailure: true },
+  );
+  assert(invalidTrackerCheck.status !== 0, "invalid tracker disposition should fail");
+  assert(
+    `${invalidTrackerCheck.stdout}\n${invalidTrackerCheck.stderr}`.includes("tracker.disposition must be one of"),
+    "invalid tracker disposition failure should remain semantic",
+  );
+
+  const malformedFreshnessPath = join(target, "tmp/apex-workflow/malformed-freshness.json");
+  const malformedFreshness = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/valid-route-local.json"), "utf8"));
+  malformedFreshness.codeIntelligence.freshness.preSliceStatus = {
+    status: "definitely-fresh",
+    recordedAt: new Date().toISOString(),
+  };
+  writeFileSync(malformedFreshnessPath, `${JSON.stringify(malformedFreshness, null, 2)}\n`);
+  const malformedFreshnessCheck = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "check",
+      "--config=apex.workflow.json",
+      "--slug=malformed-freshness",
+    ],
+    { cwd: target, allowFailure: true },
+  );
+  assert(malformedFreshnessCheck.status !== 0, "malformed freshness evidence should fail manifest schema");
+  assert(
+    `${malformedFreshnessCheck.stdout}\n${malformedFreshnessCheck.stderr}`.includes("schema:"),
+    "malformed freshness failure should identify schema validation",
+  );
+}
+
+function testCommandPolicy(root) {
+  const target = makeTarget(root, "no-adapters", "command-policy");
+  const skillDir = join(root, "skills-command-policy");
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
+
+  assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["add", "."]).status === 0, "git add failed");
+  assert(
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"])
+      .status === 0,
+    "git commit failed",
+  );
+
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=policy-slice",
+      "--issue=none",
+      "--mode=tiny",
+      "--surface=product doc",
+      "--files=PRODUCT.md",
+      "--downshift=tiny: command policy fixture",
+      "--browser=skip: docs only",
+      "--typecheck=skip: fixture docs only",
+      "--required=node --version",
+    ],
+    { cwd: target },
+  );
+
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=policy-slice",
+      "--cmd=node --version",
+    ],
+    { cwd: target },
+  );
+
+  const configPath = join(target, "apex.workflow.json");
+  const config = readConfig(target);
+  config.security = {
+    commandPolicy: {
+      mode: "allowlisted-shell",
+      allowedCommands: ["node --version", "git diff --check*"],
+      blockedShellTokens: [],
+    },
+  };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=policy-slice",
+      "--cmd=node --version",
+    ],
+    { cwd: target },
+  );
+  const unlisted = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=policy-slice",
+      "--cmd=node -e \"console.log('blocked')\"",
+    ],
+    { cwd: target, allowFailure: true },
+  );
+  assert(unlisted.status !== 0, "allowlisted-shell should block commands outside allowedCommands");
+  assert(
+    `${unlisted.stdout}\n${unlisted.stderr}`.includes("command policy blocked"),
+    "allowlist failure should explain command policy block",
+  );
+
+  config.security.commandPolicy = {
+    mode: "restricted-shell",
+    allowedCommands: [],
+    blockedShellTokens: ["&&"],
+  };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  assert(git(target, ["add", "apex.workflow.json"]).status === 0, "git add policy config failed");
+  assert(
+    git(target, [
+      "-c",
+      "user.email=apex@example.local",
+      "-c",
+      "user.name=Apex Test",
+      "commit",
+      "-m",
+      "set command policy",
+    ]).status === 0,
+    "git commit policy config failed",
+  );
+  const restricted = run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "run-check",
+      "--config=apex.workflow.json",
+      "--slug=policy-slice",
+      "--cmd=node --version && node --version",
+    ],
+    { cwd: target, allowFailure: true },
+  );
+  assert(restricted.status !== 0, "restricted-shell should block configured shell tokens");
+  assert(
+    `${restricted.stdout}\n${restricted.stderr}`.includes("blocked shell token"),
+    "restricted-shell failure should identify the blocked token",
+  );
+
+  const doctor = run(
+    [
+      join(APEX_ROOT, "scripts/apex-doctor.mjs"),
+      `--target=${target}`,
+      `--skill-dir=${skillDir}`,
+      "--skip-commands",
+      "--json",
+    ],
+    { allowFailure: true },
+  );
+  assert(doctor.status === 0, "doctor should accept reviewed restricted command policy");
+  const doctorJson = JSON.parse(doctor.stdout);
+  assert(
+    doctorJson.info.some((entry) => entry.label === "command policy"),
+    "doctor should report configured command policy",
+  );
+}
+
 function testDryRunNoWrites(root) {
   const target = makeTarget(root, "dry-run-no-writes");
   const skillDir = join(root, "dry-run-skills");
@@ -1513,6 +1758,8 @@ function main() {
     fixture("gitnexus mcp preferred", () => testGitNexusMcpPreferred(root));
     fixture("existing agents managed block", () => testExistingAgentsManagedBlock(root));
     fixture("schema validation", () => testSchemaValidation(root));
+    fixture("manifest schema validation", () => testManifestSchemaValidation(root));
+    fixture("command policy", () => testCommandPolicy(root));
     fixture("path casing mismatch", () => testPathCasingMismatch(root));
     fixture("dry-run no writes", () => testDryRunNoWrites(root));
     fixture("codebase map workflow", () => testCodebaseMapWorkflow(root));

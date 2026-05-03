@@ -4,10 +4,16 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import process from "node:process";
+import Ajv2020 from "ajv/dist/2020.js";
 import { repoRelative as repoRelativePath, resolveInsideRoot } from "./lib/paths.mjs";
 import { runTrustedCommand } from "./lib/runner.mjs";
 import { makeRunId, withManifestLock, writeManifestAtomic } from "./lib/manifest-store.mjs";
+
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const MANIFEST_SCHEMA_PATH = resolve(SCRIPT_DIR, "../schemas/apex.manifest.schema.json");
+let manifestSchemaValidator = null;
 
 function usage(exitCode = 0) {
   const message = `
@@ -66,6 +72,21 @@ function repoPath(filePath) {
 function readJson(filePath) {
   const absolute = resolveInsideRoot(process.cwd(), filePath, { label: "config path", file: true }).absolute;
   return JSON.parse(readFileSync(absolute, "utf8"));
+}
+
+function validateManifestSchema(manifest) {
+  if (!manifestSchemaValidator) {
+    const schema = JSON.parse(readFileSync(MANIFEST_SCHEMA_PATH, "utf8"));
+    const ajv = new Ajv2020({ allErrors: true, strict: false });
+    manifestSchemaValidator = ajv.compile(schema);
+  }
+
+  const ok = manifestSchemaValidator(manifest);
+  if (ok) return [];
+  return (manifestSchemaValidator.errors ?? []).map((error) => {
+    const path = error.instancePath || "/";
+    return `schema: ${path} ${error.message ?? "schema validation failed"}`;
+  });
 }
 
 function readManifest(filePath) {
@@ -316,7 +337,7 @@ function makeTemplate(args, config) {
 }
 
 function validateManifest(manifest, config) {
-  const failures = [];
+  const failures = validateManifestSchema(manifest);
   const mode = getMode(config, manifest.mode);
   const trackerDispositions = new Set(config.tracker?.dispositions ?? ["none", "existing", "new", "blocked"]);
 
@@ -353,14 +374,16 @@ function validateManifest(manifest, config) {
     failures.push("downshiftProof must explain why this mode is the lightest safe workflow");
   }
 
+  const ownedFiles = Array.isArray(manifest.ownedFiles) ? manifest.ownedFiles : [];
+  const requiredChecks = Array.isArray(manifest.checks?.required) ? manifest.checks.required : [];
   const codeFacing = Boolean(mode?.codeFacing);
-  if (codeFacing && manifest.ownedFiles.length === 0) {
+  if (codeFacing && ownedFiles.length === 0) {
     failures.push("ownedFiles must list current-slice files for code-facing modes");
   }
-  if (codeFacing && manifest.checks.required.length === 0) {
+  if (codeFacing && requiredChecks.length === 0) {
     failures.push("checks.required must list at least one focused verification command for code-facing modes");
   }
-  for (const filePath of manifest.ownedFiles ?? []) {
+  for (const filePath of ownedFiles) {
     if (String(filePath).startsWith("TODO")) failures.push(`ownedFiles contains placeholder: ${filePath}`);
   }
 
@@ -903,6 +926,7 @@ function makeRunRecord(
     durationMs,
     cwd: ".",
     shell: true,
+    commandPolicy: options.commandPolicy ?? null,
     timeoutMs: options.timeoutMs ?? null,
     timedOut: Boolean(options.timedOut),
     signal: options.signal ?? null,
@@ -1111,6 +1135,7 @@ async function runAndRecord(manifest, manifestPath, command, args = {}) {
     commandSource: args.commandSource ?? "manual-run-check",
     timeoutMs: args["timeout-ms"] ?? args.timeoutMs,
     logPath,
+    commandPolicy: args.configObject?.security?.commandPolicy,
   });
   const status = result.status === 0 ? "passed" : "failed";
   const record = makeRunRecord(
@@ -1130,6 +1155,7 @@ async function runAndRecord(manifest, manifestPath, command, args = {}) {
       logPath,
       logSha256: result.logSha256,
       timeoutMs: result.timeoutMs,
+      commandPolicy: result.commandPolicy,
       timedOut: result.timedOut,
       signal: result.signal,
       outputTruncated: result.outputTruncated,
