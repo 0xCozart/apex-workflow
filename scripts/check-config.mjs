@@ -204,6 +204,33 @@ function validateConfig(config, options) {
   if (config.version !== 1) failures.push("version must be 1");
   requireString(config, "name", failures);
   if (config.operatorCautions !== undefined) requireArray(config, "operatorCautions", failures);
+  if (config.security !== undefined) {
+    if (!isPlainObject(config.security)) {
+      failures.push("security must be an object when present");
+    } else if (config.security.commandPolicy !== undefined) {
+      const policy = config.security.commandPolicy;
+      if (!isPlainObject(policy)) {
+        failures.push("security.commandPolicy must be an object when present");
+      } else {
+        const mode = typeof policy.mode === "string" ? policy.mode : "";
+        if (!["trusted-shell", "allowlisted-shell", "restricted-shell", "exec-array-only"].includes(mode)) {
+          failures.push(
+            "security.commandPolicy.mode must be trusted-shell, allowlisted-shell, restricted-shell, or exec-array-only",
+          );
+        }
+        if (policy.allowedCommands !== undefined) requireArray(policy, "allowedCommands", failures);
+        if (policy.blockedShellTokens !== undefined) requireArray(policy, "blockedShellTokens", failures);
+        if (
+          mode === "allowlisted-shell" &&
+          (!Array.isArray(policy.allowedCommands) || policy.allowedCommands.length === 0)
+        ) {
+          failures.push(
+            "security.commandPolicy.allowedCommands must list at least one pattern in allowlisted-shell mode",
+          );
+        }
+      }
+    }
+  }
 
   const authority = requireObject(config, "authority", failures);
   requireArray(authority, "productTruth", failures);

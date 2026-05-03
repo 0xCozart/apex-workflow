@@ -64,11 +64,12 @@ function add(checks, status, label, detail) {
   checks.push({ status, label, detail });
 }
 
-async function run(command, cwd) {
+async function run(command, cwd, config) {
   const result = await runTrustedCommand(command, {
     cwd,
     commandSource: "doctor-status",
     timeoutMs: 120000,
+    commandPolicy: config?.security?.commandPolicy,
   });
   return {
     status: result.status,
@@ -172,7 +173,7 @@ async function commandCheck(checks, label, command, targetRoot, args) {
     return;
   }
 
-  const result = await run(command, targetRoot);
+  const result = await run(command, targetRoot, args.configObject);
   if (result.status === 0) add(checks, "pass", label, command);
   else
     add(
@@ -183,13 +184,78 @@ async function commandCheck(checks, label, command, targetRoot, args) {
     );
 }
 
+function commandPolicy(config) {
+  const policy = config.security?.commandPolicy;
+  return {
+    mode: String(policy?.mode ?? "trusted-shell"),
+    allowedCommands: Array.isArray(policy?.allowedCommands) ? policy.allowedCommands : [],
+    blockedShellTokens: Array.isArray(policy?.blockedShellTokens) ? policy.blockedShellTokens : [],
+  };
+}
+
+function checkCommandPolicy(checks, config) {
+  const policy = commandPolicy(config);
+  if (policy.mode === "trusted-shell") {
+    const setupReviewed =
+      config.setup?.reviewRequiredBeforeFirstSlice === false &&
+      Array.isArray(config.setup?.reviewNeeded) &&
+      config.setup.reviewNeeded.length === 0;
+    const status = setupReviewed ? "pass" : "warn";
+    add(
+      checks,
+      status,
+      "command policy",
+      setupReviewed
+        ? "trusted-shell default with reviewed setup"
+        : "trusted-shell default; review configured commands before running unreviewed profiles",
+    );
+    return;
+  }
+
+  if (policy.mode === "allowlisted-shell") {
+    const status = policy.allowedCommands.length > 0 ? "pass" : "fail";
+    add(
+      checks,
+      status,
+      "command policy",
+      `allowlisted-shell with ${policy.allowedCommands.length} allowed command pattern(s)`,
+    );
+    return;
+  }
+
+  if (policy.mode === "restricted-shell") {
+    add(
+      checks,
+      "pass",
+      "command policy",
+      `restricted-shell with ${policy.blockedShellTokens.length || "default"} blocked shell token(s)`,
+    );
+    return;
+  }
+
+  if (policy.mode === "exec-array-only") {
+    add(
+      checks,
+      "warn",
+      "command policy",
+      "exec-array-only is schema-supported but raw command execution is not yet supported",
+    );
+    return;
+  }
+
+  add(checks, "fail", "command policy", `unknown mode: ${policy.mode}`);
+}
+
 async function checkTracker(checks, config, targetRoot, args) {
   const tracker = config.tracker ?? {};
   if (!tracker.provider || tracker.provider === "none") {
     add(checks, "pass", "tracker readiness", "tracker provider is none");
     return;
   }
-  await commandCheck(checks, "tracker readiness", tracker.statusCommand ?? tracker.checkCommand, targetRoot, args);
+  await commandCheck(checks, "tracker readiness", tracker.statusCommand ?? tracker.checkCommand, targetRoot, {
+    ...args,
+    configObject: config,
+  });
 }
 
 function wrapperReady(wrapper) {
@@ -227,7 +293,7 @@ async function checkCodeIntelligence(checks, config, targetRoot, args) {
       "GitNexus wrapper readiness",
       code.wrapperFallback?.statusCommand ?? code.statusCommand,
       targetRoot,
-      args,
+      { ...args, configObject: config },
     );
   }
 }
@@ -243,7 +309,7 @@ async function checkBrowser(checks, config, targetRoot, args) {
     "browser readiness",
     browser.statusCommand ?? browser.checkCommand ?? "command -v agent-browser",
     targetRoot,
-    args,
+    { ...args, configObject: config },
   );
 }
 
@@ -369,6 +435,7 @@ async function main() {
   const config = readJson(configPath);
   runConfigCheck(checks, configPath, targetRoot);
   checkTrustBoundary(checks, config);
+  checkCommandPolicy(checks, config);
   const mapEvaluation = readMapEvaluation(targetRoot, config);
 
   const reviewNeeded = config.setup?.reviewNeeded ?? [];

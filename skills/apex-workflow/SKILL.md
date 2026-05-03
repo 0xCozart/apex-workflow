@@ -18,7 +18,8 @@ app-specific truth. The skill supplies the workflow kernel.
 Apex profiles and manifests are trusted executable workflow configuration. Commands declared in the profile, manifest,
 or CLI arguments may be run by `apex-manifest`, `apex-doctor`, and adapter fallbacks. Do not run Apex against untrusted
 profiles, manifests, or repositories without reviewing the commands first. Do not store secrets in profiles, manifests,
-logs, or finish packets.
+logs, or finish packets. When a profile configures `security.commandPolicy`, follow that policy; use
+`apex-manifest close --preview-commands` before running unfamiliar command surfaces.
 
 ## Read First
 

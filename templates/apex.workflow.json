@@ -3,6 +3,13 @@
   "name": "example-app",
   "description": "Apex Workflow profile for this app.",
   "operatorCautions": [],
+  "security": {
+    "commandPolicy": {
+      "mode": "trusted-shell",
+      "allowedCommands": [],
+      "blockedShellTokens": []
+    }
+  },
   "authority": {
     "productTruth": [],
     "executionTruth": [],

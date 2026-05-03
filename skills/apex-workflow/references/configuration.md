@@ -9,6 +9,7 @@ Apex Workflow is configured by `apex.workflow.json`.
 - `authority`: product, execution, and workflow source lists
 - `operatorCautions`: human-readable cautions that are not path authority, such as secret-handling or public/private
   repo boundaries
+- `security`: command execution policy for profile and manifest commands
 - `orientation`: docs to read before broad search
 - `modes`: allowed workflow modes
 - `tracker`: tracker adapter and recording policy
@@ -111,6 +112,31 @@ cautions in `authority.doNotUseAsAuthority`; that field is path-like and the val
 - Required path validation is exact-case. Fix `docs/ARCHITECTURE.md` to `docs/architecture.md` when that is the real
   file.
 
+## Command Policy
+
+`security.commandPolicy` is optional. If omitted, Apex uses `trusted-shell`.
+
+```json
+{
+  "security": {
+    "commandPolicy": {
+      "mode": "allowlisted-shell",
+      "allowedCommands": ["npm test", "git diff --check*"],
+      "blockedShellTokens": []
+    }
+  }
+}
+```
+
+Modes:
+
+- `trusted-shell`: existing local workflow behavior.
+- `allowlisted-shell`: raw shell commands must match `allowedCommands`.
+- `restricted-shell`: configured shell tokens are blocked before execution.
+- `exec-array-only`: future strict mode; current raw command execution is refused.
+
+Use `apex-manifest close --preview-commands` before running unfamiliar profile command surfaces.
+
 ## Doctor
 
 Use the doctor to answer whether the target repo is ready for its first implementation slice:
@@ -130,6 +156,9 @@ setup files have a clean git baseline.
 `manifest.defaultDir` should match the artifact's intended durability. Use a committed docs/proof directory for reviewer
 evidence, or keep `tmp/apex-workflow` only when the target repo intentionally treats selected tmp manifests as durable
 artifacts.
+
+Manifest shape is validated against `schemas/apex.manifest.schema.json`; workflow semantics such as owned files for
+code-facing modes, allowed tracker dispositions, and GitNexus freshness gates remain script-level validation.
 
 Use `apex-manifest run-check` to record command results into the manifest:
 
