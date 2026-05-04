@@ -10,6 +10,8 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { repoRelative as repoRelativePath, resolveInsideRoot } from "./lib/paths.mjs";
 import { runTrustedCommand } from "./lib/runner.mjs";
 import { makeRunId, withManifestLock, writeManifestAtomic } from "./lib/manifest-store.mjs";
+import { appendObservation } from "./lib/observations.mjs";
+import { normalizeAdaptiveProfile } from "./lib/profile-model.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const MANIFEST_SCHEMA_PATH = resolve(SCRIPT_DIR, "../schemas/apex.manifest.schema.json");
@@ -19,6 +21,7 @@ function usage(exitCode = 0) {
   const message = `
 Usage:
   node scripts/apex-manifest.mjs new --config=apex.workflow.json --slug=<slug> --issue=APP-1 --mode=route-local --surface="owner" --downshift="route-local: one owner and focused checks cover the slice"
+  node scripts/apex-manifest.mjs new --config=apex.workflow.json --slug=<slug> --template=build_install --preset=build_install --issue=APP-1 --mode=route-local --surface="owner" --downshift="ledger: build/install evidence required"
   node scripts/apex-manifest.mjs new --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --issue=APP-1 --mode=route-local --surface="owner" --downshift="route-local: one owner and focused checks cover the slice"
   node scripts/apex-manifest.mjs check --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json
   node scripts/apex-manifest.mjs files --file=tmp/apex-workflow/<slug>.json
@@ -30,7 +33,7 @@ Usage:
   node scripts/apex-manifest.mjs close --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --next="APP-2" --preview-commands
   node scripts/apex-manifest.mjs close --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --next="APP-2" --allow-stale-evidence="reason when required checks were intentionally not rerun"
   node scripts/apex-manifest.mjs summary --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json
-  node scripts/apex-manifest.mjs finish --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --verified="npm test" --next="APP-2"
+  node scripts/apex-manifest.mjs finish --config=apex.workflow.json --file=tmp/apex-workflow/<slug>.json --verified="npm test" --operator-answers="Did it build?: yes" --next="APP-2"
 `;
   (exitCode === 0 ? console.log : console.error)(message.trim());
   process.exit(exitCode);
@@ -253,6 +256,25 @@ function defaultTypecheckDisposition(config, mode) {
   return typecheckCommand ? `configured: ${typecheckCommand}` : "skip: no typecheck command configured in profile";
 }
 
+function adaptiveProfile(config) {
+  return normalizeAdaptiveProfile(config);
+}
+
+function presetFromArgs(args, config) {
+  const adaptive = adaptiveProfile(config);
+  const templateName = args.template ? String(args.template) : null;
+  const template = templateName ? adaptive.sliceTemplates?.[templateName] : null;
+  if (templateName && !template) throw new Error(`unknown slice template: ${templateName}`);
+  const presetName = String(args.preset ?? template?.verificationPreset ?? adaptive.verification.defaultPreset);
+  const preset = adaptive.verification.presets?.[presetName];
+  if (!preset) {
+    throw new Error(
+      `unknown verification preset: ${presetName}. Expected one of: ${Object.keys(adaptive.verification.presets).join(", ")}`,
+    );
+  }
+  return { adaptive, templateName, template, presetName, preset };
+}
+
 function makeFreshnessTemplate() {
   return {
     preSliceStatus: null,
@@ -279,14 +301,22 @@ function makeTemplate(args, config) {
   const browserDisposition = args.browser ?? defaultBrowserDisposition(config);
   const typecheckDisposition = args.typecheck ?? defaultTypecheckDisposition(config, mode);
   const codeFacing = Boolean(getMode(config, mode)?.codeFacing);
+  const profileSelection = presetFromArgs(args, config);
   const requiredChecks = normalizeStringArray(args.required);
   const optionalChecks = normalizeStringArray(args.optional);
+  const presetCommands = normalizeStringArray(profileSelection.preset.commands);
+  const presetRequiredEvidence = normalizeStringArray(profileSelection.preset.requiredEvidence);
+  const presetOptionalEvidence = normalizeStringArray(profileSelection.preset.optionalEvidence);
+  const templateFinishQuestions = normalizeStringArray(profileSelection.template?.finishQuestions);
 
   return {
     version: 1,
     app: config.name,
     issue,
     mode,
+    operatingModel: profileSelection.template?.operatingModel ?? profileSelection.adaptive.operatingModel.default,
+    template: profileSelection.templateName,
+    verificationPreset: profileSelection.presetName,
     surface: String(args.surface ?? (mode === "reconciliation" ? "reconciliation evidence" : "TODO: owning surface")),
     contracts: normalizeStringArray(args.contracts),
     ownedFiles: normalizeStringArray(args.files),
@@ -306,7 +336,9 @@ function makeTemplate(args, config) {
         requiredChecks.length > 0
           ? requiredChecks
           : codeFacing
-            ? normalizeStringArray(config.verification?.requiredCommands)
+            ? presetCommands.length > 0
+              ? presetCommands
+              : normalizeStringArray(config.verification?.requiredCommands)
             : [],
       optional:
         optionalChecks.length > 0
@@ -317,7 +349,10 @@ function makeTemplate(args, config) {
       browser: String(browserDisposition),
       typecheck: String(typecheckDisposition),
       runs: [],
+      requiredEvidence: presetRequiredEvidence,
+      optionalEvidence: presetOptionalEvidence,
     },
+    finishQuestions: templateFinishQuestions,
     evidence: [],
     tracker: {
       provider: config.tracker?.provider ?? "none",
@@ -359,6 +394,20 @@ function validateManifest(manifest, config) {
   }
   if (!manifest.checks || !Array.isArray(manifest.checks.required)) failures.push("checks.required must be an array");
   if (!Array.isArray(manifest.checks?.optional)) failures.push("checks.optional must be an array");
+  if (manifest.finishQuestions !== undefined && !Array.isArray(manifest.finishQuestions)) {
+    failures.push("finishQuestions must be an array when present");
+  }
+  if (manifest.template !== undefined && manifest.template !== null) {
+    const templates = normalizeAdaptiveProfile(config).sliceTemplates ?? {};
+    if (!templates[String(manifest.template)])
+      failures.push(`template must reference config.sliceTemplates: ${manifest.template}`);
+  }
+  if (manifest.verificationPreset !== undefined && manifest.verificationPreset !== null) {
+    const presets = normalizeAdaptiveProfile(config).verification.presets ?? {};
+    if (!presets[String(manifest.verificationPreset)]) {
+      failures.push(`verificationPreset must reference config.verification.presets: ${manifest.verificationPreset}`);
+    }
+  }
   if (manifest.evidence && !Array.isArray(manifest.evidence)) failures.push("evidence must be an array");
   if (!manifest.checks?.browser || String(manifest.checks.browser).startsWith("TODO")) {
     failures.push("checks.browser must be a route or explicit skip reason");
@@ -670,6 +719,14 @@ async function runDetect(args, config, options = {}) {
   const builtInResult = builtInDetect(manifest, filePath, args);
   printBuiltInDetect(builtInResult);
   updateDetectResult(manifest, builtInResult);
+  recordObservation(config, manifest, "detect", {
+    detect: {
+      ok: builtInResult.ok,
+      changedFilesCount: builtInResult.changedFiles.length,
+      unownedDirtyFiles: builtInResult.unownedChangedFiles.length,
+      missingOwnedFiles: builtInResult.missingOwnedFiles.length,
+    },
+  });
   if (args.write || options.write) writeManifest(filePath, manifest);
 
   const detectCommand = config.codeIntelligence?.detectCommand;
@@ -795,6 +852,35 @@ function formatGitNexusFreshness(manifest, config) {
   return formatList(entries);
 }
 
+function operatorAnswers(args) {
+  const entries = normalizeStringArray(args["operator-answers"] ?? args["operator-answer"]);
+  const answers = new Map();
+  for (const entry of entries) {
+    const splitAt = entry.indexOf(":");
+    if (splitAt <= 0) continue;
+    const question = entry.slice(0, splitAt).trim().toLowerCase();
+    const answer = entry.slice(splitAt + 1).trim();
+    if (question && answer) answers.set(question, answer);
+  }
+  return answers;
+}
+
+function formatOperatorQuestions(manifest, args) {
+  const questions = normalizeStringArray(manifest.finishQuestions);
+  if (questions.length === 0) return "none configured";
+  const answers = operatorAnswers(args);
+  return formatList(
+    questions.map((question) => `${question} ${answers.get(question.toLowerCase()) ?? "not recorded"}`),
+  );
+}
+
+function operatorQuestionsAnswered(manifest, args) {
+  const questions = normalizeStringArray(manifest.finishQuestions);
+  if (questions.length === 0) return 0;
+  const answers = operatorAnswers(args);
+  return questions.filter((question) => answers.has(question.toLowerCase())).length;
+}
+
 function finishValue(label, manifest, config, args) {
   const normalized = label.toLowerCase();
   if (normalized === "what landed") return args.landed || manifest.notes || `${manifest.surface} slice`;
@@ -825,6 +911,7 @@ function finishValue(label, manifest, config, args) {
   }
   if (normalized === "manual evidence" || normalized === "evidence") return formatEvidence(manifest);
   if (normalized === "gitnexus freshness") return formatGitNexusFreshness(manifest, config);
+  if (normalized === "operator questions") return formatOperatorQuestions(manifest, args);
   if (normalized === "code-intelligence scope" || normalized === "gitnexus scope")
     return codeIntelligenceScope(manifest);
   if (normalized === "tracker update" || normalized === "linear update") {
@@ -869,11 +956,24 @@ function commandFinish(args, config) {
           "Tracker update",
           "Next safe slice",
         ];
+  const finishLabels =
+    normalizeStringArray(manifest.finishQuestions).length > 0 ? [...labels, "Operator questions"] : labels;
   const output = [
     `# Finish Packet`,
     "",
-    ...labels.flatMap((label) => [`## ${label}`, finishValue(label, manifest, config, args), ""]),
+    ...finishLabels.flatMap((label) => [`## ${label}`, finishValue(label, manifest, config, args), ""]),
   ].join("\n");
+  recordObservation(config, manifest, "finish", {
+    finishPacket: {
+      labels: finishLabels.length,
+      requiredChecks: normalizeStringArray(manifest.checks?.required).length,
+      recordedRuns: checkRuns(manifest).length,
+      evidenceRecords: evidenceRecords(manifest).length,
+      operatorQuestionsAnswered: operatorQuestionsAnswered(manifest, args),
+      operatorQuestionsRequired: normalizeStringArray(manifest.finishQuestions).length,
+      nextSafeSlice: args.next ?? null,
+    },
+  });
 
   if (args.out) {
     const outPath = resolveInsideRoot(process.cwd(), String(args.out), {
@@ -978,6 +1078,27 @@ function appendRun(manifest, record) {
 function appendEvidence(manifest, record) {
   if (!Array.isArray(manifest.evidence)) manifest.evidence = [];
   manifest.evidence.push(record);
+}
+
+function recordObservation(config, manifest, type, payload = {}) {
+  try {
+    const adaptive = normalizeAdaptiveProfile(config);
+    return appendObservation(process.cwd(), config, {
+      type,
+      app: manifest.app ?? config.name,
+      sliceType: manifest.template ?? manifest.mode ?? "unknown",
+      operatingModel: adaptive.operatingModel.default,
+      manifest: {
+        mode: manifest.mode,
+        ownedFilesCount: normalizeStringArray(manifest.ownedFiles).length,
+        noTouchFilesCount: normalizeStringArray(manifest.noTouch).length,
+      },
+      ...payload,
+    });
+  } catch (error) {
+    console.error(`[apex-manifest] observation skipped: ${error instanceof Error ? error.message : String(error)}`);
+    return { skipped: true };
+  }
 }
 
 function ensureFreshness(manifest) {
@@ -1166,6 +1287,17 @@ async function runAndRecord(manifest, manifestPath, command, args = {}) {
   );
   record.logSha256 = result.logSha256;
   appendRun(manifest, record);
+  recordObservation(args.configObject ?? {}, manifest, "check-run", {
+    checks: {
+      command: redacted(record.command),
+      commandSource: record.commandSource,
+      status: record.status,
+      exitCode: record.exitCode,
+      durationMs: record.durationMs,
+      timedOut: record.timedOut,
+      outputTruncated: record.outputTruncated,
+    },
+  });
   console.log(`[apex-manifest] ${status}: ${result.command} (${logPath})`);
   if (result.stderr && status === "failed") console.error(tail(result.stderr, 1200));
   return result.status;
@@ -1262,6 +1394,15 @@ function commandRecordCheck(args, config) {
       note: String(args.note ?? ""),
     }),
   );
+  recordObservation(config, manifest, "record-check", {
+    checks: {
+      command: redacted(String(command)),
+      commandSource: "manual-record-check",
+      status,
+      exitCode,
+      durationMs: 0,
+    },
+  });
   writeManifest(filePath, manifest);
   console.log(`[apex-manifest] recorded ${status}: ${command}`);
 }

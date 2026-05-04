@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -789,6 +789,84 @@ function testSchemaValidation(root) {
     invalidJson.schema.errors.some((error) => error.message.includes("must have required property")),
     "schema errors should include required property details",
   );
+
+  const adaptiveConfig = join(root, "adaptive-valid.workflow.json");
+  const baseProfile = JSON.parse(readFileSync(join(APEX_ROOT, "profiles/service-desk.workflow.json"), "utf8"));
+  writeFileSync(adaptiveConfig, `${JSON.stringify(baseProfile, null, 2)}\n`);
+  const adaptive = run([
+    join(APEX_ROOT, "scripts/check-config.mjs"),
+    `--config=${adaptiveConfig}`,
+    "--target=fixtures/config/service-desk",
+    "--allow-outside-config",
+    "--format=json",
+  ]);
+  assert(JSON.parse(adaptive.stdout).ok === true, "adaptive profile should pass config check");
+
+  const invalidAdaptiveCases = [
+    [
+      "invalid-operating-model.workflow.json",
+      (config) => {
+        config.operatingModel.default = "autopilot";
+      },
+      "operatingModel/default",
+    ],
+    [
+      "invalid-confidence.workflow.json",
+      (config) => {
+        config.codeIntelligence.confidenceByTarget.file_path = "certain";
+      },
+      "confidenceByTarget/file_path",
+    ],
+    [
+      "invalid-slice-template.workflow.json",
+      (config) => {
+        config.sliceTemplates.docs = { verificationPreset: "missing-preset" };
+      },
+      "sliceTemplates.docs.verificationPreset",
+    ],
+    [
+      "invalid-slice-template-no-presets.workflow.json",
+      (config) => {
+        delete config.verification.presets;
+        config.sliceTemplates.docs = { verificationPreset: "docs_only" };
+      },
+      "sliceTemplates.docs.verificationPreset",
+    ],
+    [
+      "conflicting-manifest-policy.workflow.json",
+      (config) => {
+        config.manifestPolicy.directory = "tmp/other-apex";
+      },
+      "manifestPolicy.directory",
+    ],
+  ];
+
+  for (const [fileName, mutate, expected] of invalidAdaptiveCases) {
+    const config = JSON.parse(JSON.stringify(baseProfile));
+    mutate(config);
+    const filePath = join(root, fileName);
+    writeFileSync(filePath, `${JSON.stringify(config, null, 2)}\n`);
+    const result = run(
+      [
+        join(APEX_ROOT, "scripts/check-config.mjs"),
+        `--config=${filePath}`,
+        "--target=fixtures/config/service-desk",
+        "--allow-outside-config",
+        "--format=json",
+      ],
+      { allowFailure: true },
+    );
+    assert(result.status !== 0, `${fileName} should fail config check`);
+    const parsed = JSON.parse(result.stdout);
+    const allErrors = [
+      ...(parsed.schema?.errors ?? []).map((error) => `${error.path} ${error.message}`),
+      ...(parsed.repoChecks?.errors ?? []),
+    ];
+    assert(
+      allErrors.some((error) => error.includes(expected)),
+      `${fileName} should report ${expected}`,
+    );
+  }
 }
 
 function testManifestSchemaValidation(root) {
@@ -1052,6 +1130,375 @@ function testDryRunNoWrites(root) {
     !readFileSync(join(target, ".gitignore"), "utf8").includes("# apex-workflow:start"),
     "dry-run should not update .gitignore",
   );
+}
+
+function testDiscoverInstall(root) {
+  const target = join(root, "rust-discovery");
+  mkdirSync(target, { recursive: true });
+  writeFileSync(join(target, "Cargo.toml"), '[package]\nname = "rust-discovery"\nversion = "0.1.0"\n');
+  writeFileSync(join(target, "README.md"), "# Rust Discovery\n");
+  writeFileSync(join(target, "AGENTS.md"), "# Agent Instructions\n");
+  const skillDir = join(root, "skills-discovery");
+  const result = initHarness(
+    target,
+    ["--discover", "--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
+  const config = JSON.parse(readFileSync(join(target, "apex.workflow.json"), "utf8"));
+  assert(config.setup.discovery.enabled === true, "discover install should record setup.discovery.enabled");
+  assert(
+    config.setup.discovery.ecosystems.some((entry) => entry.id === "rust"),
+    "discover install should detect Rust ecosystem",
+  );
+  assert(config.operatingModel.default === "ledger", "discover install should default to ledger mode");
+  assert(config.manifestPolicy.directory === "tmp/apex-workflow", "discover install should set manifest policy");
+  assert(config.verification.presets.focused.commands.includes("cargo fmt --check"), "Rust preset should include fmt");
+  assert(
+    `${result.stdout}\n${result.stderr}`.includes("- discovery:"),
+    "install report should include discovery section",
+  );
+
+  const nodeTarget = join(root, "node-discovery");
+  mkdirSync(nodeTarget, { recursive: true });
+  writeFileSync(
+    join(nodeTarget, "package.json"),
+    JSON.stringify({ name: "node-discovery", private: true, scripts: { test: "node --version" } }, null, 2),
+  );
+  writeFileSync(join(nodeTarget, "README.md"), "# Node Discovery\n");
+  writeFileSync(join(nodeTarget, "AGENTS.md"), "# Agent Instructions\n");
+  initHarness(
+    nodeTarget,
+    ["--discover", "--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    join(root, "skills-node-discovery"),
+  );
+  const nodeConfig = JSON.parse(readFileSync(join(nodeTarget, "apex.workflow.json"), "utf8"));
+  assert(
+    nodeConfig.setup.discovery.ecosystems.some((entry) => entry.id === "node"),
+    "discover install should detect Node ecosystem",
+  );
+  assert(
+    nodeConfig.verification.presets.focused.commands.includes("npm test"),
+    "Node preset should include package test script",
+  );
+}
+
+function testProfileCli(root) {
+  const target = makeTarget(root, "no-adapters", "profile-cli");
+  const skillDir = join(root, "skills-profile-cli");
+  initHarness(
+    target,
+    ["--discover", "--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
+
+  const show = run(
+    [join(APEX_ROOT, "scripts/apex-profile.mjs"), "show", "--config=apex.workflow.json", `--target=${target}`],
+    { cwd: target },
+  );
+  assert(show.stdout.includes("operating model: ledger"), "profile show should print operating model");
+
+  const discover = run(
+    [
+      join(APEX_ROOT, "scripts/apex-profile.mjs"),
+      "discover",
+      `--target=${target}`,
+      "--out=tmp/apex-workflow/discovered-profile.json",
+    ],
+    { cwd: target },
+  );
+  assert(discover.stdout.includes("discovery summary"), "profile discover should print summary");
+  assert(
+    existsSync(join(target, "tmp/apex-workflow/discovered-profile.json")),
+    "profile discover should write discovery JSON",
+  );
+  const candidate = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/discovered-profile.json"), "utf8"));
+  assert(candidate.candidateProfile?.operatingModel?.default === "ledger", "profile discover should include candidate");
+
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-profile.mjs"),
+      "discover",
+      `--target=${target}`,
+      "--write",
+      "--profile=tmp/apex-workflow/candidate.workflow.json",
+    ],
+    { cwd: target },
+  );
+  assert(
+    existsSync(join(target, "tmp/apex-workflow/candidate.workflow.json")),
+    "profile discover --write should write candidate profile",
+  );
+
+  const recommendationsPath = join(target, "tmp/apex-workflow/profile-recommendations.json");
+  mkdirSync(dirname(recommendationsPath), { recursive: true });
+  writeFileSync(
+    recommendationsPath,
+    JSON.stringify(
+      {
+        version: 1,
+        recommendations: [
+          {
+            id: "operating-model-assisted",
+            category: "operating-model",
+            path: "operatingModel.default",
+            proposedValue: "assisted",
+            reason: "fixture recommendation",
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+  );
+
+  const diff = run(
+    [
+      join(APEX_ROOT, "scripts/apex-profile.mjs"),
+      "diff",
+      "--config=apex.workflow.json",
+      `--target=${target}`,
+      "--recommendations=tmp/apex-workflow/profile-recommendations.json",
+    ],
+    { cwd: target },
+  );
+  assert(diff.stdout.includes("operating-model-assisted"), "profile diff should include recommendation id");
+  assert(diff.stdout.includes('proposed: "assisted"'), "profile diff should include proposed value");
+
+  const accept = run(
+    [
+      join(APEX_ROOT, "scripts/apex-profile.mjs"),
+      "accept",
+      "--config=apex.workflow.json",
+      `--target=${target}`,
+      "--recommendations=tmp/apex-workflow/profile-recommendations.json",
+      "--yes",
+    ],
+    { cwd: target },
+  );
+  assert(accept.stdout.includes("applied: 1"), "profile accept should apply one recommendation");
+  const acceptedConfig = JSON.parse(readFileSync(join(target, "apex.workflow.json"), "utf8"));
+  assert(acceptedConfig.operatingModel.default === "assisted", "profile accept should update config");
+  assert(
+    readdirSync(join(target, "tmp/apex-workflow/profile-backups")).some((entry) => entry.endsWith(".json")),
+    "profile accept should write a backup",
+  );
+
+  const missingId = run(
+    [
+      join(APEX_ROOT, "scripts/apex-profile.mjs"),
+      "accept",
+      "--config=apex.workflow.json",
+      `--target=${target}`,
+      "--recommendations=tmp/apex-workflow/profile-recommendations.json",
+      "--id=does-not-exist",
+      "--yes",
+    ],
+    { cwd: target, allowFailure: true },
+  );
+  assert(missingId.status !== 0, "profile accept should fail for an unknown recommendation id");
+  assert(missingId.stderr.includes("recommendation id(s) not found"), "missing id failure should be explicit");
+
+  const recommend = run(
+    [join(APEX_ROOT, "scripts/apex-profile.mjs"), "recommend", "--config=apex.workflow.json", `--target=${target}`],
+    { cwd: target },
+  );
+  assert(recommend.stdout.includes("recommendations:"), "profile recommend should print summary");
+}
+
+function testObservationLogging(root) {
+  const target = makeTarget(root, "no-adapters", "observation-logging");
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    join(root, "skills-observation"),
+  );
+  assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["add", "."]).status === 0, "git add failed");
+  assert(
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"])
+      .status === 0,
+    "git commit failed",
+  );
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=observation-slice",
+      "--issue=none",
+      "--mode=tiny",
+      "--surface=fixture observation",
+      "--files=PRODUCT.md",
+      "--downshift=tiny: observation fixture",
+      "--browser=skip: no browser",
+      "--typecheck=skip: no typecheck",
+    ],
+    { cwd: target },
+  );
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "record-check",
+      "--config=apex.workflow.json",
+      "--slug=observation-slice",
+      "--cmd=fixture manual check",
+      "--status=passed",
+    ],
+    { cwd: target },
+  );
+  run(
+    [join(APEX_ROOT, "scripts/apex-manifest.mjs"), "detect", "--config=apex.workflow.json", "--slug=observation-slice"],
+    { cwd: target },
+  );
+  const observationPath = join(target, "tmp/apex-workflow/observations.jsonl");
+  assert(existsSync(observationPath), "manifest commands should write observation log");
+  const rows = readFileSync(observationPath, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert(
+    rows.some((row) => row.type === "record-check"),
+    "observation log should include record-check",
+  );
+  assert(
+    rows.some((row) => row.type === "detect"),
+    "observation log should include detect",
+  );
+  assert(
+    rows.some((row) => row.checks?.command === "fixture manual check"),
+    "observation log should include redacted command summary",
+  );
+  assert(
+    rows.every((row) => !JSON.stringify(row).includes("stdoutTail") && !JSON.stringify(row).includes("stderrTail")),
+    "observation log should not store raw output tails",
+  );
+
+  const configPath = join(target, "apex.workflow.json");
+  const config = JSON.parse(readFileSync(configPath, "utf8"));
+  config.profileDiscovery.enabled = false;
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  const before = readFileSync(observationPath, "utf8");
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "record-check",
+      "--config=apex.workflow.json",
+      "--slug=observation-slice",
+      "--cmd=fixture disabled observation",
+      "--status=skipped",
+    ],
+    { cwd: target },
+  );
+  assert(readFileSync(observationPath, "utf8") === before, "disabled observation logging should not append rows");
+}
+
+function testProfileRecommendations(root) {
+  const target = makeTarget(root, "no-adapters", "profile-recommendations");
+  initHarness(
+    target,
+    ["--discover", "--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    join(root, "skills-profile-recommendations"),
+  );
+  const configPath = join(target, "apex.workflow.json");
+  const config = JSON.parse(readFileSync(configPath, "utf8"));
+  config.verification.broadChecksRunLast = false;
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  const observationPath = join(target, "tmp/apex-workflow/observations.jsonl");
+  mkdirSync(dirname(observationPath), { recursive: true });
+  const observations = [
+    {
+      timestamp: "2026-05-04T00:00:00.000Z",
+      sliceType: "build_install",
+      changedFiles: ["Cargo.toml", "scripts/install.sh"],
+      codeIntel: { unknown: 2, targetNotFound: 1, blockedSlice: false },
+      checks: { command: "CARGO_BUILD_JOBS=1 cargo check --no-default-features", durationMs: 130000, status: "passed" },
+      finishPacket: { operatorQuestionsAnswered: 3, operatorQuestionsRequired: 7 },
+    },
+  ];
+  writeFileSync(observationPath, `${observations.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
+  const recommend = run(
+    [join(APEX_ROOT, "scripts/apex-profile.mjs"), "recommend", "--config=apex.workflow.json", `--target=${target}`],
+    { cwd: target },
+  );
+  assert(recommend.stdout.includes("recommendations:"), "profile recommend should print recommendation count");
+  const output = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/profile-recommendations.json"), "utf8"));
+  const ids = output.recommendations.map((entry) => entry.id);
+  assert(ids.includes("code-intelligence-low-signal-paths"), "recommend should downgrade low-signal path checks");
+  assert(ids.includes("verification-broad-checks-run-last"), "recommend should move broad checks last");
+  assert(ids.includes("slice-template-build-install"), "recommend should add build/install template");
+}
+
+function testManifestPresetsAndTemplates(root) {
+  const target = makeTarget(root, "no-adapters", "manifest-presets");
+  initHarness(
+    target,
+    ["--discover", "--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    join(root, "skills-manifest-presets"),
+  );
+  const configPath = join(target, "apex.workflow.json");
+  const config = JSON.parse(readFileSync(configPath, "utf8"));
+  config.verification.presets.build_install = {
+    commands: ["git diff --check", "node --check scripts/install-smoke.mjs"],
+    requiredEvidence: ["installed_binary_path", "binary_size_nonzero"],
+  };
+  config.sliceTemplates.build_install = {
+    operatingModel: "ledger",
+    verificationPreset: "build_install",
+    finishQuestions: ["Did it build?", "Which binary was installed?"],
+  };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "new",
+      "--config=apex.workflow.json",
+      "--slug=build-install-slice",
+      "--issue=none",
+      "--mode=route-local",
+      "--template=build_install",
+      "--surface=fixture build install",
+      "--files=PRODUCT.md",
+      "--downshift=ledger: fixture build install evidence",
+      "--browser=skip: no browser",
+      "--typecheck=skip: fixture",
+    ],
+    { cwd: target },
+  );
+  const manifestPath = join(target, "tmp/apex-workflow/build-install-slice.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  assert(manifest.template === "build_install", "manifest should record selected slice template");
+  assert(manifest.verificationPreset === "build_install", "manifest should record selected verification preset");
+  assert(
+    manifest.checks.required.includes("node --check scripts/install-smoke.mjs"),
+    "manifest should use preset commands as required checks",
+  );
+  assert(
+    manifest.checks.requiredEvidence.includes("installed_binary_path"),
+    "manifest should carry preset required evidence",
+  );
+  assert(
+    manifest.finishQuestions.includes("Which binary was installed?"),
+    "manifest should carry template finish questions",
+  );
+
+  const finishOut = "tmp/apex-workflow/build-install-finish.md";
+  run(
+    [
+      join(APEX_ROOT, "scripts/apex-manifest.mjs"),
+      "finish",
+      "--config=apex.workflow.json",
+      "--slug=build-install-slice",
+      "--verified=git diff --check",
+      "--operator-answers=Did it build?: yes,Which binary was installed?: fixture-bin",
+      "--next=none",
+      `--out=${finishOut}`,
+    ],
+    { cwd: target },
+  );
+  const finish = readFileSync(join(target, finishOut), "utf8");
+  assert(finish.includes("## Operator questions"), "finish packet should include operator questions");
+  assert(finish.includes("fixture-bin"), "finish packet should include provided operator answer");
 }
 
 function testCodebaseMapWorkflow(root) {
@@ -1767,6 +2214,11 @@ function main() {
     fixture("command policy", () => testCommandPolicy(root));
     fixture("path casing mismatch", () => testPathCasingMismatch(root));
     fixture("dry-run no writes", () => testDryRunNoWrites(root));
+    fixture("discover install", () => testDiscoverInstall(root));
+    fixture("profile cli", () => testProfileCli(root));
+    fixture("observation logging", () => testObservationLogging(root));
+    fixture("profile recommendations", () => testProfileRecommendations(root));
+    fixture("manifest presets and templates", () => testManifestPresetsAndTemplates(root));
     fixture("codebase map workflow", () => testCodebaseMapWorkflow(root));
     fixture("portable cli entrypoints", () => testPortableCliEntrypoints(root));
     fixture("control-plane hardening", () => testControlPlaneHardening(root));

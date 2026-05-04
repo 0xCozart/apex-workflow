@@ -122,7 +122,22 @@
       "postSliceSkipReason": "Required when post-slice refresh is intentionally skipped."
     },
     "fallback": "Use the repo-local wrapper from docs/runbooks/gitnexus-local-workflow.md plus focused rg/sed caller confirmation when GitNexus MCP is stale, unavailable, or suspiciously low-signal.",
-    "highRiskWarning": "Warn before proceeding when impact is HIGH or CRITICAL."
+    "highRiskWarning": "Warn before proceeding when impact is HIGH or CRITICAL.",
+    "confidenceByTarget": {
+      "symbol": "high",
+      "type": "high",
+      "module": "medium",
+      "file_path": "measure",
+      "new_file": "measure",
+      "manifest_file": "measure",
+      "script": "measure",
+      "workflow": "measure",
+      "documentation": "advisory"
+    },
+    "requireFor": [],
+    "advisoryFor": ["documentation"],
+    "skipFor": [],
+    "fallbackEvidence": "focused_source_review"
   },
   "contracts": {
     "featureArtifacts": ["docs/feature-artifacts"],
@@ -143,6 +158,21 @@
       "origin": "http://127.0.0.1:3000",
       "artifacts": "tmp/agent-browser",
       "policy": "Functional browser evidence only; visible UI changes still need a short human visual audit checklist."
+    },
+    "defaultPreset": "focused",
+    "broadChecksRunLast": true,
+    "expensiveCommandPolicy": {
+      "maxConcurrentJobs": 1,
+      "warnAfterSeconds": 120
+    },
+    "presets": {
+      "focused": {
+        "commands": ["git diff --check"]
+      },
+      "docs_only": {
+        "commands": ["git diff --check"],
+        "skipBroadBuild": true
+      }
     }
   },
   "uiUx": {
@@ -172,6 +202,52 @@
       "Code-intelligence scope",
       "Tracker update",
       "Next safe slice"
+    ]
+  },
+  "profileDiscovery": {
+    "enabled": true,
+    "observationLog": "tmp/apex-workflow/observations.jsonl",
+    "recommendAfterManifests": 10,
+    "recommendAfterDays": 7
+  },
+  "operatingModel": {
+    "default": "ledger",
+    "allowed": ["ledger", "assisted", "executor"],
+    "executeCommandDefault": "disabled",
+    "reason": "Use Apex for scope, evidence, and repo-calibrated workflow guidance unless this repo explicitly opts into stronger execution."
+  },
+  "manifestPolicy": {
+    "directory": "tmp/apex-workflow",
+    "requiredWhen": [
+      "multi_file_change",
+      "dirty_worktree_present",
+      "shared_surface_change",
+      "install_or_release_change",
+      "security_sensitive_change",
+      "operator_requested_evidence"
+    ],
+    "optionalWhen": ["single_file_low_risk_change", "docs_only_change"],
+    "deferWhen": ["exploratory_debugging", "single_command_diagnosis", "owned_files_unknown"],
+    "deferredMode": {
+      "name": "measurement_debugging",
+      "recordsCommands": true,
+      "requiresOwnedFiles": false,
+      "requiresDetect": false
+    }
+  },
+  "sliceTemplates": {},
+  "finishPacket": {
+    "requireOperatorQuestions": false,
+    "include": [
+      "summary",
+      "owned_files",
+      "no_touch_files",
+      "commands_run",
+      "commands_failed_or_skipped",
+      "evidence",
+      "detect_result",
+      "remaining_risk",
+      "next_safe_slice"
     ]
   }
 }

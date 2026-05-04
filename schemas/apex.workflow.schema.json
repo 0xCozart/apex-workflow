@@ -21,6 +21,40 @@
     "name": { "type": "string", "minLength": 1 },
     "description": { "type": "string" },
     "operatorCautions": { "type": "array", "items": { "type": "string" } },
+    "profileDiscovery": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "observationLog": { "type": "string", "minLength": 1 },
+        "recommendAfterManifests": { "type": "number", "minimum": 0 },
+        "recommendAfterDays": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "operatingModel": {
+      "type": "object",
+      "properties": {
+        "default": { "type": "string", "enum": ["ledger", "assisted", "executor"] },
+        "allowed": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["ledger", "assisted", "executor"] }
+        },
+        "executeCommandDefault": { "type": "string", "enum": ["disabled", "manual", "enabled"] },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "manifestPolicy": {
+      "type": "object",
+      "properties": {
+        "directory": { "type": "string", "minLength": 1 },
+        "requiredWhen": { "type": "array", "items": { "type": "string" } },
+        "optionalWhen": { "type": "array", "items": { "type": "string" } },
+        "deferWhen": { "type": "array", "items": { "type": "string" } },
+        "deferredMode": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
     "security": {
       "type": "object",
       "properties": {
@@ -161,6 +195,17 @@
           },
           "additionalProperties": true
         },
+        "confidenceByTarget": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["high", "medium", "low", "advisory", "measure", "skip"]
+          }
+        },
+        "requireFor": { "type": "array", "items": { "type": "string" } },
+        "advisoryFor": { "type": "array", "items": { "type": "string" } },
+        "skipFor": { "type": "array", "items": { "type": "string" } },
+        "fallbackEvidence": { "type": "string" },
         "fallback": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": true
@@ -182,6 +227,27 @@
         "focusedChecksFirst": { "type": "boolean" },
         "requiredCommands": { "type": "array", "items": { "type": "string" } },
         "optionalCommands": { "type": "array", "items": { "type": "string" } },
+        "defaultPreset": { "type": "string" },
+        "broadChecksRunLast": { "type": "boolean" },
+        "expensiveCommandPolicy": { "type": "object", "additionalProperties": true },
+        "presets": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "commands": { "type": "array", "items": { "type": "string" } },
+              "optionalCommands": { "type": "array", "items": { "type": "string" } },
+              "requiredEvidence": { "type": "array", "items": { "type": "string" } },
+              "optionalEvidence": { "type": "array", "items": { "type": "string" } },
+              "skipBroadBuild": { "type": "boolean" },
+              "broadChecksRunLast": { "type": "boolean" },
+              "maxConcurrency": { "type": "number" },
+              "environment": { "type": "object" },
+              "timeoutPolicy": { "type": "object" }
+            },
+            "additionalProperties": true
+          }
+        },
         "freshnessInputs": { "type": "array", "items": { "type": "string" } },
         "envAllowlist": { "type": "array", "items": { "type": "string" } },
         "knownFailures": { "type": ["string", "null"] },
@@ -215,6 +281,29 @@
       "properties": {
         "defaultDir": { "type": "string", "minLength": 1 },
         "finishPacket": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "sliceTemplates": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "triggerGlobs": { "type": "array", "items": { "type": "string" } },
+          "operatingModel": { "type": "string", "enum": ["ledger", "assisted", "executor"] },
+          "codeIntelPolicy": { "type": "string" },
+          "verificationPreset": { "type": "string" },
+          "finishQuestions": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": true
+      }
+    },
+    "finishPacket": {
+      "type": "object",
+      "properties": {
+        "requireOperatorQuestions": { "type": "boolean" },
+        "include": { "type": "array", "items": { "type": "string" } }
       },
       "additionalProperties": true
     },

@@ -119,6 +119,18 @@ If the install report says
 `baseline checkpoint: commit AGENTS.md/apex.workflow.json setup before the first implementation slice`, do that before
 starting product code. Mixing harness bootstrap with implementation weakens the first manifest and finish packet.
 
+For new repos, prefer discovery mode first:
+
+```bash
+npm run init -- --target=/path/to/app --discover
+npm run profile -- show --config=apex.workflow.json --target=/path/to/app
+```
+
+Discovery starts in ledger mode, writes a conditional manifest policy, infers focused verification presets, and records
+an observation log path under `tmp/apex-workflow/observations.jsonl`. Use `apex-profile recommend` after real local runs
+to propose profile changes; use `apex-profile diff` and `apex-profile accept --yes` only after reviewing the proposed
+config paths. Apex does not send observations remotely and does not apply recommendations automatically.
+
 Create manifests by slug so `manifest.defaultDir` owns the artifact location:
 
 ```bash
@@ -140,6 +152,15 @@ Record verification outcomes as they run:
 ```bash
 apex-manifest run-check --config=apex.workflow.json --slug=app-123-slice --cmd="npm test"
 ```
+
+Profiles can also route manifest creation through named presets and slice templates:
+
+```bash
+apex-manifest new --config=apex.workflow.json --slug=build-install --template=build_install --mode=route-local --surface="installer" --files=scripts/install.sh --downshift="ledger: build/install evidence required"
+```
+
+The manifest records `operatingModel`, `template`, `verificationPreset`, preset commands, required evidence, and
+template finish questions so reviewers can see why a slice used focused checks instead of a broad default gate.
 
 Each command run stores a manifest record plus a hashed log file under `tmp/apex-workflow/logs/<slice>/`. Reviewers can
 inspect the manifest tails for quick context and open the log path for captured stdout/stderr. Apex redacts common token

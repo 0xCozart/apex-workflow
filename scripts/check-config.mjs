@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import process from "node:process";
 import Ajv2020 from "ajv/dist/2020.js";
 import { resolveInsideRoot } from "./lib/paths.mjs";
+import { ADAPTIVE_ENUMS } from "./lib/profile-model.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = resolve(SCRIPT_DIR, "../schemas/apex.workflow.schema.json");
@@ -94,6 +95,110 @@ function requireString(root, key, failures) {
   }
 
   return root[key];
+}
+
+function optionalObject(root, key, failures) {
+  if (root[key] === undefined) return {};
+  if (!isPlainObject(root[key])) {
+    failures.push(`${key} must be an object when present`);
+    return {};
+  }
+  return root[key];
+}
+
+function validateStringSet(values, allowed, label, failures) {
+  for (const value of values ?? []) {
+    if (!allowed.has(value)) failures.push(`${label} contains invalid value: ${value}`);
+  }
+}
+
+function validateAdaptiveConfig(config, failures) {
+  const operatingModel = optionalObject(config, "operatingModel", failures);
+  const allowedModels = Array.isArray(operatingModel.allowed)
+    ? operatingModel.allowed
+    : ["ledger", "assisted", "executor"];
+  validateStringSet(allowedModels, ADAPTIVE_ENUMS.operatingModels, "operatingModel.allowed", failures);
+  if (
+    operatingModel.default !== undefined &&
+    (!ADAPTIVE_ENUMS.operatingModels.has(operatingModel.default) || !allowedModels.includes(operatingModel.default))
+  ) {
+    failures.push("operatingModel.default must be one of operatingModel.allowed");
+  }
+  if (
+    operatingModel.executeCommandDefault !== undefined &&
+    !ADAPTIVE_ENUMS.executeCommandDefaults.has(operatingModel.executeCommandDefault)
+  ) {
+    failures.push("operatingModel.executeCommandDefault must be disabled, manual, or enabled");
+  }
+
+  const manifestPolicy = optionalObject(config, "manifestPolicy", failures);
+  if (
+    typeof manifestPolicy.directory === "string" &&
+    typeof config.manifest?.defaultDir === "string" &&
+    manifestPolicy.directory !== config.manifest.defaultDir
+  ) {
+    failures.push("manifestPolicy.directory must match manifest.defaultDir when both are configured");
+  }
+
+  const confidenceByTarget = config.codeIntelligence?.confidenceByTarget;
+  if (confidenceByTarget !== undefined) {
+    if (!isPlainObject(confidenceByTarget)) {
+      failures.push("codeIntelligence.confidenceByTarget must be an object when present");
+    } else {
+      for (const [target, confidence] of Object.entries(confidenceByTarget)) {
+        if (!ADAPTIVE_ENUMS.codeIntelligenceConfidence.has(confidence)) {
+          failures.push(`codeIntelligence.confidenceByTarget.${target} has invalid confidence: ${confidence}`);
+        }
+      }
+    }
+  }
+
+  const verification = config.verification ?? {};
+  const presets = verification.presets;
+  const effectivePresetNames = new Set(isPlainObject(presets) ? Object.keys(presets) : ["focused"]);
+  if (presets !== undefined && !isPlainObject(presets)) {
+    failures.push("verification.presets must be an object when present");
+  }
+  if (isPlainObject(presets)) {
+    if (verification.defaultPreset !== undefined && !presets[verification.defaultPreset]) {
+      failures.push("verification.defaultPreset must reference a key in verification.presets");
+    }
+    for (const [name, preset] of Object.entries(presets)) {
+      if (!isPlainObject(preset)) {
+        failures.push(`verification.presets.${name} must be an object`);
+        continue;
+      }
+      if (preset.commands !== undefined && !Array.isArray(preset.commands)) {
+        failures.push(`verification.presets.${name}.commands must be an array when present`);
+      }
+      if (preset.requiredEvidence !== undefined && !Array.isArray(preset.requiredEvidence)) {
+        failures.push(`verification.presets.${name}.requiredEvidence must be an array when present`);
+      }
+      if (preset.optionalEvidence !== undefined && !Array.isArray(preset.optionalEvidence)) {
+        failures.push(`verification.presets.${name}.optionalEvidence must be an array when present`);
+      }
+    }
+  }
+
+  const sliceTemplates = config.sliceTemplates;
+  if (sliceTemplates !== undefined) {
+    if (!isPlainObject(sliceTemplates)) {
+      failures.push("sliceTemplates must be an object when present");
+    } else {
+      for (const [name, template] of Object.entries(sliceTemplates)) {
+        if (!isPlainObject(template)) {
+          failures.push(`sliceTemplates.${name} must be an object`);
+          continue;
+        }
+        if (template.verificationPreset && !effectivePresetNames.has(template.verificationPreset)) {
+          failures.push(`sliceTemplates.${name}.verificationPreset must reference verification.presets`);
+        }
+        if (template.operatingModel && !ADAPTIVE_ENUMS.operatingModels.has(template.operatingModel)) {
+          failures.push(`sliceTemplates.${name}.operatingModel has invalid value: ${template.operatingModel}`);
+        }
+      }
+    }
+  }
 }
 
 function collectDocPath(rawValue) {
@@ -303,6 +408,8 @@ function validateConfig(config, options) {
   const manifest = requireObject(config, "manifest", failures);
   requireString(manifest, "defaultDir", failures);
   requireArray(manifest, "finishPacket", failures);
+
+  validateAdaptiveConfig(config, failures);
 
   if (options.target) {
     const targetRoot = normalizeTargetRoot(options.target);

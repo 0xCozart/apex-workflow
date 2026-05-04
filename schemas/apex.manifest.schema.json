@@ -26,6 +26,9 @@
     "app": { "type": "string", "minLength": 1 },
     "issue": { "type": "string", "minLength": 1 },
     "mode": { "type": "string", "minLength": 1 },
+    "operatingModel": { "type": "string", "enum": ["ledger", "assisted", "executor"] },
+    "template": { "type": ["string", "null"] },
+    "verificationPreset": { "type": ["string", "null"] },
     "surface": { "type": "string", "minLength": 1 },
     "contracts": { "type": "array", "items": { "type": "string" } },
     "ownedFiles": { "type": "array", "items": { "type": "string" } },
@@ -115,6 +118,8 @@
         "optional": { "type": "array", "items": { "type": "string" } },
         "browser": { "type": "string", "minLength": 1 },
         "typecheck": { "type": "string", "minLength": 1 },
+        "requiredEvidence": { "type": "array", "items": { "type": "string" } },
+        "optionalEvidence": { "type": "array", "items": { "type": "string" } },
         "runs": {
           "type": "array",
           "items": {
@@ -142,6 +147,7 @@
       },
       "additionalProperties": true
     },
+    "finishQuestions": { "type": "array", "items": { "type": "string" } },
     "evidence": {
       "type": "array",
       "items": {

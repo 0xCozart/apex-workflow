@@ -21,15 +21,21 @@ Status: reviewed Reviewed at: 2026-04-30T00:00:00.000Z
 - `scripts/check-config.mjs` owns schema and target path validation.
 - `scripts/apex-doctor.mjs` owns readiness checks.
 - `scripts/apex-manifest.mjs` owns slice manifests, evidence, close, and finish packets.
-- `scripts/bench-workflow.mjs` owns workflow outcome benchmarks.
+- `scripts/apex-profile.mjs` owns adaptive profile show, discovery, recommendation diffs, and manual acceptance.
+- `scripts/bench-workflow.mjs` owns fixture workflow outcome benchmarks.
+- `scripts/bench-target-repo.mjs` owns read-only target-repo readiness benchmarks.
 - `scripts/apex-map-codebase.mjs` owns generated codebase-map scaffolds.
 - `scripts/test-installer-fixtures.mjs` is the broad fixture harness for control-plane behavior.
 
 ## Core Domains And Ownership Zones
 
-- Installer domain: profile inference, managed `AGENTS.md`, managed `.gitignore`, codebase map handoff, skill linking.
-- Manifest domain: slice scope, dirty-file detection, verification evidence, GitNexus freshness, finish packets.
+- Installer domain: profile inference, adaptive discovery, managed `AGENTS.md`, managed `.gitignore`, codebase map
+  handoff, skill linking.
+- Manifest domain: slice scope, dirty-file detection, verification presets, observation logging, GitNexus freshness,
+  finish packets.
 - Validation domain: JSON schemas, exact target path checks, portability scanning.
+- Adaptive profile domain: operating model, manifest policy, code-intelligence confidence, slice templates, local
+  recommendations, and profile acceptance.
 - Security and benchmark domain: supply-chain checks, command policy, and workflow outcome measurement.
 - Documentation domain: README, adoption guide, quickstart, security model, and agent skill instructions.
 
@@ -41,6 +47,7 @@ Status: reviewed Reviewed at: 2026-04-30T00:00:00.000Z
 - `apex-check-config`: `scripts/check-config.mjs`
 - `apex-map-codebase`: `scripts/apex-map-codebase.mjs`
 - Workflow benchmark: `npm run bench:workflow`
+- Target repo benchmark: `npm run bench:target -- --target=/path/to/app`
 - Maintainer checks: `npm run check:syntax`, `npm run check:portability`, `npm run check:config`,
   `npm run test:fixtures`, `npm run test:demo`, `npm run self-check`
 
@@ -77,6 +84,8 @@ Status: reviewed Reviewed at: 2026-04-30T00:00:00.000Z
 - Installer, manifest, doctor, map, and evidence behavior: `npm run test:fixtures`.
 - Quickstart/no-service flow: `npm run test:demo`.
 - Workflow quality metrics: `npm run bench:workflow`.
+- Target adoption readiness: `npm run bench:target -- --target=/path/to/app`.
+- Adaptive profile inspection: `npm run profile -- show --config=apex.workflow.json --target=/path/to/app`.
 - Security and supply-chain checks: `npm run check:security` and `npm run check:supply-chain`.
 - Final local gate: `npm run self-check` and `git diff --check`.
 

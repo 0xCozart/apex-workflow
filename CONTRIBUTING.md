@@ -25,7 +25,9 @@ git diff --check
 
 Run focused commands earlier while developing. `npm run self-check` is the fast clean-room core gate.
 `npm run hardening-check` is the final local hardening gate for shared-surface, security-sensitive, schema, fixture, CI,
-and benchmark changes; it runs `self-check`, `check:security`, `check:supply-chain`, and `bench:workflow`. Neither
+and benchmark changes; it runs `self-check`, `check:security`, `check:supply-chain`, and `bench:workflow`. CI keeps
+`self-check` on the full OS and Node matrix, then proves `hardening-check` once on Ubuntu with Node 24 so the heavier
+security, supply-chain, and benchmark gate is visible without duplicating it across every portability cell. Neither
 command is a substitute for understanding the affected surface.
 
 ## Pull Request Expectations
@@ -36,6 +38,7 @@ Every non-trivial PR should state:
 - which shared surfaces were touched
 - which checks were run, with skipped checks called out explicitly
 - whether profile schemas, manifest schemas, fixtures, docs, or security notes needed updates
+- benchmark evidence for shared-surface, workflow-control, CI, release, fixture, manifest, or installer changes
 - any remaining risk or next safe slice
 
 Tiny documentation or comment-only changes may use a smaller verification set, but the PR must say why the smaller set
@@ -133,3 +136,12 @@ Reviewers should be able to answer:
 - Is the next safe slice clear?
 
 Use machine-readable output where available for CI and benchmark evidence.
+
+Workflow benchmark evidence lives under `benchmarks/`. Use `npm run bench:workflow` for portable fixture evidence and
+`npm run bench:target -- --target=/path/to/app` for local adoption-readiness proof against a real app or checked-in
+fixture. Do not make private repos, secrets, or external services required benchmark inputs.
+
+Adaptive profile changes need evidence for both the generated config and the recommendation loop. When touching
+`operatingModel`, `manifestPolicy`, `verification.presets`, `sliceTemplates`, code-intelligence confidence, observation
+logging, or `apex-profile`, include the relevant fixture test output plus one target benchmark summary. Recommendations
+must stay local and pending until `apex-profile accept --yes` is run intentionally.

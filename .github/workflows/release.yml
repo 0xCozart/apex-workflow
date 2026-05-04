@@ -1,0 +1,49 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  artifact-release:
+    name: artifact-only release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: hardening-check
+        run: npm run hardening-check
+
+      - name: Generate SBOM
+        run: npm run check:supply-chain
+
+      - name: Pack npm tarball without publishing
+        run: |
+          mkdir -p tmp/apex-workflow/release
+          npm pack --pack-destination tmp/apex-workflow/release
+
+      - name: Archive release metadata
+        run: |
+          cp package.json package-lock.json SECURITY.md tmp/apex-workflow/release/
+          cp tmp/apex-workflow/sbom.json tmp/apex-workflow/release/sbom.cyclonedx.json
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: apex-workflow-${{ github.ref_name }}
+          path: tmp/apex-workflow/release/
+          if-no-files-found: error

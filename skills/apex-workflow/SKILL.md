@@ -91,6 +91,15 @@ Do not treat skill installation as complete until the target repo has a profile.
 
 Choose one mode from the profile before implementation.
 
+If the profile has adaptive fields, treat `operatingModel.default` as the execution posture:
+
+- `ledger`: use Apex for scope, checks, observations, detect results, and finish evidence; implement directly.
+- `assisted`: let Apex suggest routing, verification presets, and finish requirements, but keep implementation direct.
+- `executor`: use only when the repo explicitly enables it and the verification gates are mature.
+
+Use `apex-profile show --config=apex.workflow.json --target=.` when the current operating model or verification preset
+is unclear.
+
 Default mode meanings:
 
 - `tiny`: one known file, low risk, no durable tracker state
@@ -201,6 +210,9 @@ apex-manifest \
   --tracker-update="<tracker disposition>" \
   --next="<next safe slice>"
 ```
+
+For slice templates with operator questions, pass reviewed answers with `--operator-answers="Question: answer"` or leave
+them unrecorded so the finish packet shows the gap explicitly.
 
 Prefer recording checks into the manifest instead of only listing commands:
 

@@ -29,23 +29,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: format:check
-        run: npm run format:check
-
-      - name: check:syntax
-        run: npm run check:syntax
-
-      - name: check:portability
-        run: npm run check:portability
-
-      - name: check:config
-        run: npm run check:config
-
-      - name: test:fixtures
-        run: npm run test:fixtures
-
-      - name: test:demo
-        run: npm run test:demo
-
       - name: self-check
         run: npm run self-check
+
+  hardening-check:
+    name: hardening-check
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: hardening-check
+        run: npm run hardening-check

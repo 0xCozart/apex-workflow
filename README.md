@@ -34,6 +34,13 @@ Apex profiles and manifests are trusted executable workflow configuration. Some 
 declared in the profile, manifest, or CLI arguments. Read [SECURITY.md](SECURITY.md) before installing Apex into an
 unfamiliar repository or running manifests from another source.
 
+## Release Posture
+
+Apex is currently a private package and does not publish to npm. Tagged `v*` release workflow runs are artifact-only:
+they run `npm run hardening-check`, generate an SBOM, create a local package tarball, and upload the artifacts to the
+workflow run. Signed tags, GitHub artifact attestations, and npm provenance are future upgrades documented in
+[SECURITY.md](SECURITY.md).
+
 ## Remote Policy
 
 Apex requires a normal Git repo and uses `origin` as the working remote when GitHub-backed workflows are needed.
@@ -453,6 +460,35 @@ npm run bench:workflow
 The workflow benchmark writes machine-readable output to `tmp/apex-workflow/workflow-benchmark.json` and fails on scope
 escapes, missing verification evidence, incomplete finish packets, stale-evidence misses, dirty-branch false failures,
 or unrecoverable resume state.
+
+## Adaptive Repo Profiles
+
+Apex can now inspect a target repo and produce a candidate adaptive profile:
+
+```bash
+npm run profile -- discover --target=/path/to/app
+npm run init -- --target=/path/to/app --discover
+```
+
+Discovery defaults to `operatingModel.default = ledger`, disables executor-style command driving by default, records a
+conditional manifest policy, and infers focused verification presets from repo evidence. Use
+`npm run profile -- show --config=apex.workflow.json --target=/path/to/app` to inspect the effective operating model,
+manifest policy, code-intelligence fallback, observation log, and verification presets.
+
+Manifest creation can use explicit presets and slice templates:
+
+```bash
+npm run manifest -- new --config=apex.workflow.json --slug=build-install --template=build_install --mode=route-local --surface="installer" --files=scripts/install.sh --downshift="ledger: install evidence required"
+```
+
+Local observations are written to `tmp/apex-workflow/observations.jsonl` when profile discovery is enabled. They stay
+inside the repo by default. Profile recommendations are generated but never applied without an explicit accept step:
+
+```bash
+npm run profile -- recommend --config=apex.workflow.json --target=/path/to/app
+npm run profile -- diff --config=apex.workflow.json --target=/path/to/app
+npm run profile -- accept --config=apex.workflow.json --target=/path/to/app --yes
+```
 
 ## License
 
