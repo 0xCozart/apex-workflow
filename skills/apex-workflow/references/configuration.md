@@ -111,6 +111,17 @@ cautions in `authority.doNotUseAsAuthority`; that field is path-like and the val
   authority.
 - Required path validation is exact-case. Fix `docs/ARCHITECTURE.md` to `docs/architecture.md` when that is the real
   file.
+- Canonical adaptive fields are `version` and `codeIntelligence.provider`. The validator translates older
+  `schemaVersion` and `codeIntelligence.backend` aliases only when they do not conflict; new profiles should not write
+  the aliases.
+- `verification.defaultPreset` must reference a preset that exists after normalization. If it points at `build_install`,
+  the profile must define `verification.presets.build_install`.
+- Adaptive discovery is opt-in during install. Use `apex-init --discover` for new repos that should collect local
+  observations and recommendations.
+- Rust discovery keeps `focused` cheap: `git diff --check` and `cargo fmt --check`. Constrained or broad Cargo checks
+  belong in explicit presets such as `rust_constrained`, `rust_broad`, or a repo-specific `build_install` preset.
+- Observation logs stay under the repo-local discovery path and are sanitized before persistence. Raw output fields are
+  dropped, long strings are capped, and common token/password/secret/bearer patterns are redacted.
 
 ## Command Policy
 
@@ -153,9 +164,10 @@ setup files have a clean git baseline.
 
 ## Manifest Evidence
 
-`manifest.defaultDir` should match the artifact's intended durability. Use a committed docs/proof directory for reviewer
-evidence, or keep `tmp/apex-workflow` only when the target repo intentionally treats selected tmp manifests as durable
-artifacts.
+`manifest.defaultDir` should match the artifact's intended durability. The default `tmp/apex-workflow/` directory is
+local runtime state and should be ignored in open-source target repos. Use a committed docs/proof directory for reviewer
+evidence only when the target repo deliberately wants durable public artifacts, and review those artifacts for secrets,
+private paths, and local execution details before committing.
 
 Manifest shape is validated against `schemas/apex.manifest.schema.json`; workflow semantics such as owned files for
 code-facing modes, allowed tracker dispositions, and GitNexus freshness gates remain script-level validation.

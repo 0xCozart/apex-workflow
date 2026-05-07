@@ -34,7 +34,7 @@ The installer will:
 - create or update a managed Apex block in `AGENTS.md`
 - validate the generated profile
 - print a post-install report with inferred path confidence, adapter choices, repo dirty state, and next checkpoint
-  guidance
+  guidance, including whether adaptive discovery was skipped
 - symlink the local `apex-workflow` skill unless `--skip-skill-link` is passed
 
 If the target has no broad-search orientation doc, create a draft codebase map:
@@ -119,17 +119,23 @@ If the install report says
 `baseline checkpoint: commit AGENTS.md/apex.workflow.json setup before the first implementation slice`, do that before
 starting product code. Mixing harness bootstrap with implementation weakens the first manifest and finish packet.
 
-For new repos, prefer discovery mode first:
+Adaptive discovery is opt-in. For new repos, prefer discovery mode first:
 
 ```bash
-npm run init -- --target=/path/to/app --discover
-npm run profile -- show --config=apex.workflow.json --target=/path/to/app
+apex-init --target=/path/to/app --discover
+apex-profile show --config=apex.workflow.json --target=/path/to/app
 ```
 
 Discovery starts in ledger mode, writes a conditional manifest policy, infers focused verification presets, and records
-an observation log path under `tmp/apex-workflow/observations.jsonl`. Use `apex-profile recommend` after real local runs
-to propose profile changes; use `apex-profile diff` and `apex-profile accept --yes` only after reviewing the proposed
-config paths. Apex does not send observations remotely and does not apply recommendations automatically.
+an observation log path under `tmp/apex-workflow/observations.jsonl`. Rust focused discovery uses only cheap checks:
+`git diff --check` and `cargo fmt --check`. Constrained or broad Cargo checks are separate presets and should run last
+only when a repo explicitly needs that evidence. Use `apex-profile recommend` after real local runs to propose profile
+changes; use `apex-profile diff` and `apex-profile accept --yes` only after reviewing the proposed config paths. Apex
+does not send observations remotely, sanitizes observations before writing local JSONL, and does not apply
+recommendations automatically.
+
+Canonical adaptive config uses `version` and `codeIntelligence.provider`. `apex-check-config` translates older
+`schemaVersion` and `codeIntelligence.backend` aliases only when they do not conflict with the canonical fields.
 
 Create manifests by slug so `manifest.defaultDir` owns the artifact location:
 
@@ -143,9 +149,10 @@ changed-file coverage, so it is useful even without GitNexus. Reconciliation man
 `dirtyPolicy=owned-files-only`: unrelated dirty files are recorded in `scope.externalDirtyFiles` and
 `codeIntelligence.detect.externalDirtyFiles`, but they do not fail the slice when the owned-file scope is clean.
 
-If manifests are durable reviewer or grant evidence, set `manifest.defaultDir` to a committed evidence path such as
-`.apex/manifests` or `docs/proof/apex-workflow`. Keep `tmp/apex-workflow` only when the repo intentionally commits
-selected tmp manifests.
+By default, manifests and command logs live under ignored `tmp/apex-workflow/` local runtime state. If manifests are
+durable reviewer or grant evidence, set `manifest.defaultDir` to a committed evidence path such as `.apex/manifests`
+or `docs/proof/apex-workflow`, then review those artifacts for secrets, private paths, and local execution details
+before committing.
 
 Record verification outcomes as they run:
 

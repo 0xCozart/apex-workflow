@@ -76,7 +76,9 @@ apex-doctor \
 ```
 
 7. Read the install report. Before the first implementation slice, resolve or consciously accept `setup.reviewNeeded`,
-   confirm any `setup.inferredPaths` marked `guessed`, and preserve any `operatorCautions`.
+   confirm any `setup.inferredPaths` marked `guessed`, preserve any `operatorCautions`, and note whether adaptive
+   discovery was skipped. Discovery is opt-in; use `--discover` when a new repo should start with ledger-first adaptive
+   recommendations.
 8. If the installer generated a draft codebase map, review it, remove `REVIEW NEEDED` markers, then run:
 
 ```bash
@@ -86,6 +88,11 @@ apex-map-codebase --target=. --check --require-reviewed
 
 Do not treat skill installation as complete until the target repo has a profile. When GitNexus is selected, prefer
 `gitnexus-mcp`. Use `gitnexus-wrapper` only when MCP is blocked or unreliable for that target environment.
+
+Public repo hygiene: the install contract files `AGENTS.md`, `apex.workflow.json`, and the managed `.gitignore` block
+are intended to be committed. Runtime Apex artifacts under `tmp/apex-workflow/` are local execution state and should be
+ignored by default. Do not commit slice manifests, detect outputs, observation logs, command logs, or finish evidence
+from `tmp/apex-workflow/` unless the target repo explicitly chooses a durable reviewed evidence path instead.
 
 ## Mode Selection
 
@@ -99,6 +106,11 @@ If the profile has adaptive fields, treat `operatingModel.default` as the execut
 
 Use `apex-profile show --config=apex.workflow.json --target=.` when the current operating model or verification preset
 is unclear.
+
+Adaptive discovery must stay ledger-first. Rust `focused` verification is limited to cheap checks such as
+`git diff --check` and `cargo fmt --check`; constrained or broad Cargo checks belong in explicit escalated presets and
+should run last. Canonical adaptive config fields are `version` and `codeIntelligence.provider`; older
+`schemaVersion`/`codeIntelligence.backend` aliases are accepted only by validation when they do not conflict.
 
 Default mode meanings:
 
@@ -141,6 +153,11 @@ The manifest owns:
 - required checks
 - known baseline failures
 - browser expectation
+
+The default manifest directory is local and ignored. Use it for scope control and handoff during execution, not as an
+open-source artifact. If a repo needs grant, audit, or reviewer evidence to be committed, configure `manifest.defaultDir`
+to a deliberate public path such as `docs/proof/apex-workflow/` or `.apex/manifests/`, then review the contents for
+secrets and private execution details before committing.
 
 Use the manifest for scoped changed-file analysis:
 
@@ -282,3 +299,4 @@ Use `--preview-commands` first when the command surface is unfamiliar or the pro
 - listing verification commands without recording whether they actually ran
 - treating browser screenshots as visual signoff when the profile says functional-only
 - finishing without a manifest-backed scope and verification summary
+- committing `tmp/apex-workflow/` manifests or logs to an open-source repo instead of keeping them ignored local state

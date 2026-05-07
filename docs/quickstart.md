@@ -70,6 +70,10 @@ git add AGENTS.md apex.workflow.json .gitignore
 git -c user.email=apex@example.local -c user.name="Apex Test" commit -m "install Apex workflow"
 ```
 
+Keep `tmp/apex-workflow/` ignored. The installer-managed `.gitignore` block treats manifests, logs, detect output, and
+observation files as local execution artifacts. Commit only the public workflow contract files above unless the target
+repo deliberately configures a reviewed evidence directory outside `tmp/`.
+
 ## 5. Run Doctor
 
 ```bash
@@ -124,8 +128,8 @@ apex-manifest close --config=apex.workflow.json --slug=quickstart-demo --skip-re
 apex-manifest finish --config=apex.workflow.json --slug=quickstart-demo --next=none
 ```
 
-The manifest is at `tmp/apex-workflow/quickstart-demo.json`. Command logs are under
-`tmp/apex-workflow/logs/quickstart-demo/`.
+The manifest is at ignored local path `tmp/apex-workflow/quickstart-demo.json`. Command logs are under ignored local
+path `tmp/apex-workflow/logs/quickstart-demo/`.
 
 ## Automated Smoke
 

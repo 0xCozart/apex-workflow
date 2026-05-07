@@ -69,7 +69,8 @@ APEX WORKFLOW CONTROL PLANE
 [target application repo]
   AGENTS.md managed block
   apex.workflow.json
-  tmp/apex-workflow/*.json
+  .gitignore managed Apex local-artifact block
+  tmp/apex-workflow/ ignored local manifests, logs, and observations
   repo docs / contracts / tests
         |
         | every agent run reads the profile
@@ -471,9 +472,11 @@ npm run init -- --target=/path/to/app --discover
 ```
 
 Discovery defaults to `operatingModel.default = ledger`, disables executor-style command driving by default, records a
-conditional manifest policy, and infers focused verification presets from repo evidence. Use
-`npm run profile -- show --config=apex.workflow.json --target=/path/to/app` to inspect the effective operating model,
-manifest policy, code-intelligence fallback, observation log, and verification presets.
+conditional manifest policy, and infers focused verification presets from repo evidence. Rust focused discovery stays
+cheap (`git diff --check`, `cargo fmt --check`); constrained or broad Cargo checks live in separate escalated presets.
+The installer does not run discovery unless `--discover` is passed, and the install report says when discovery was
+skipped. Use `npm run profile -- show --config=apex.workflow.json --target=/path/to/app` to inspect the effective
+operating model, manifest policy, code-intelligence fallback, observation log, and verification presets.
 
 Manifest creation can use explicit presets and slice templates:
 
@@ -482,13 +485,19 @@ npm run manifest -- new --config=apex.workflow.json --slug=build-install --templ
 ```
 
 Local observations are written to `tmp/apex-workflow/observations.jsonl` when profile discovery is enabled. They stay
-inside the repo by default. Profile recommendations are generated but never applied without an explicit accept step:
+inside the repo by default and are sanitized before persistence: raw output fields are dropped, long strings are capped,
+and common token/password/secret/bearer patterns are redacted. Profile recommendations are generated but never applied
+without an explicit accept step:
 
 ```bash
 npm run profile -- recommend --config=apex.workflow.json --target=/path/to/app
 npm run profile -- diff --config=apex.workflow.json --target=/path/to/app
 npm run profile -- accept --config=apex.workflow.json --target=/path/to/app --yes
 ```
+
+Canonical adaptive config uses `version` and `codeIntelligence.provider`. `apex-check-config` accepts the older
+`schemaVersion` and `codeIntelligence.backend` aliases only when they do not conflict, and validates the normalized
+profile.
 
 ## License
 
