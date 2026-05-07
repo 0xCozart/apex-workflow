@@ -833,6 +833,14 @@ function testSchemaValidation(root) {
       "sliceTemplates.docs.verificationPreset",
     ],
     [
+      "invalid-default-preset.workflow.json",
+      (config) => {
+        delete config.verification.presets.build_install;
+        config.verification.defaultPreset = "build_install";
+      },
+      "verification.defaultPreset",
+    ],
+    [
       "conflicting-manifest-policy.workflow.json",
       (config) => {
         config.manifestPolicy.directory = "tmp/other-apex";
@@ -1154,6 +1162,20 @@ function testDiscoverInstall(root) {
   assert(config.manifestPolicy.directory === "tmp/apex-workflow", "discover install should set manifest policy");
   assert(config.verification.presets.focused.commands.includes("cargo fmt --check"), "Rust preset should include fmt");
   assert(
+    !config.verification.presets.focused.commands.includes("cargo check"),
+    "Rust focused preset should not include broad cargo check",
+  );
+  assert(
+    config.verification.presets.rust_constrained.commands.includes(
+      "CARGO_BUILD_JOBS=1 cargo check --no-default-features",
+    ),
+    "Rust discovery should include a constrained cargo check preset",
+  );
+  assert(
+    config.verification.presets.rust_broad.commands.includes("cargo check"),
+    "Rust discovery should include broad cargo checks outside focused",
+  );
+  assert(
     `${result.stdout}\n${result.stderr}`.includes("- discovery:"),
     "install report should include discovery section",
   );
@@ -1180,6 +1202,35 @@ function testDiscoverInstall(root) {
     nodeConfig.verification.presets.focused.commands.includes("npm test"),
     "Node preset should include package test script",
   );
+
+  for (const [manager, lockFile, expectedCommand] of [
+    ["pnpm", "pnpm-lock.yaml", "pnpm test"],
+    ["yarn", "yarn.lock", "yarn test"],
+  ]) {
+    const managerTarget = join(root, `${manager}-discovery`);
+    mkdirSync(managerTarget, { recursive: true });
+    writeFileSync(
+      join(managerTarget, "package.json"),
+      JSON.stringify({ name: `${manager}-discovery`, private: true, scripts: { test: "node --version" } }, null, 2),
+    );
+    writeFileSync(join(managerTarget, lockFile), "");
+    writeFileSync(join(managerTarget, "README.md"), `# ${manager} Discovery\n`);
+    writeFileSync(join(managerTarget, "AGENTS.md"), "# Agent Instructions\n");
+    initHarness(
+      managerTarget,
+      ["--discover", "--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+      join(root, `skills-${manager}-discovery`),
+    );
+    const managerConfig = JSON.parse(readFileSync(join(managerTarget, "apex.workflow.json"), "utf8"));
+    assert(
+      managerConfig.verification.requiredCommands.includes(expectedCommand),
+      `${manager} required commands should use ${manager}`,
+    );
+    assert(
+      managerConfig.verification.presets.focused.commands.includes(expectedCommand),
+      `${manager} focused preset should use ${manager}`,
+    );
+  }
 }
 
 function testProfileCli(root) {
@@ -1373,6 +1424,38 @@ function testObservationLogging(root) {
     "observation log should not store raw output tails",
   );
 
+  runNodeModule(
+    `
+      import { appendObservation } from ${JSON.stringify(pathToFileURL(join(APEX_ROOT, "scripts/lib/observations.mjs")).href)};
+      const target = ${JSON.stringify(target)};
+      const config = {
+        profileDiscovery: { enabled: true, observationLog: "tmp/apex-workflow/sanitized-observations.jsonl" }
+      };
+      appendObservation(target, config, {
+        type: "sanitize-fixture",
+        command: "deploy --token=super-secret-value",
+        stdout: "raw stdout should be dropped",
+        stderr: "raw stderr should be dropped",
+        randomCallerPayload: "should be dropped",
+        metadata: {
+          password: "hunter2",
+          bearer: "Bearer abcdefghijklmnop",
+          output: "nested raw output should be dropped"
+        }
+      });
+    `,
+    { cwd: target },
+  );
+  const sanitizedRow = JSON.parse(readFileSync(join(target, "tmp/apex-workflow/sanitized-observations.jsonl"), "utf8"));
+  const serializedSanitized = JSON.stringify(sanitizedRow);
+  assert(!serializedSanitized.includes("super-secret-value"), "observation sanitizer should redact token values");
+  assert(!serializedSanitized.includes("hunter2"), "observation sanitizer should redact password values");
+  assert(!serializedSanitized.includes("abcdefghijklmnop"), "observation sanitizer should redact bearer tokens");
+  assert(!serializedSanitized.includes("raw stdout"), "observation sanitizer should drop stdout");
+  assert(!serializedSanitized.includes("raw stderr"), "observation sanitizer should drop stderr");
+  assert(!serializedSanitized.includes("nested raw output"), "observation sanitizer should drop nested raw output");
+  assert(!serializedSanitized.includes("randomCallerPayload"), "observation sanitizer should drop unknown fields");
+
   const configPath = join(target, "apex.workflow.json");
   const config = JSON.parse(readFileSync(configPath, "utf8"));
   config.profileDiscovery.enabled = false;
@@ -1411,8 +1494,7 @@ function testProfileRecommendations(root) {
       sliceType: "build_install",
       changedFiles: ["Cargo.toml", "scripts/install.sh"],
       codeIntel: { unknown: 2, targetNotFound: 1, blockedSlice: false },
-      checks: { command: "CARGO_BUILD_JOBS=1 cargo check --no-default-features", durationMs: 130000, status: "passed" },
-      finishPacket: { operatorQuestionsAnswered: 3, operatorQuestionsRequired: 7 },
+      checks: [{ command: "cargo check", durationSeconds: 92, status: "passed" }],
     },
   ];
   writeFileSync(observationPath, `${observations.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
@@ -1426,6 +1508,12 @@ function testProfileRecommendations(root) {
   assert(ids.includes("code-intelligence-low-signal-paths"), "recommend should downgrade low-signal path checks");
   assert(ids.includes("verification-broad-checks-run-last"), "recommend should move broad checks last");
   assert(ids.includes("slice-template-build-install"), "recommend should add build/install template");
+  assert(ids.includes("verification-preset-build-install"), "recommend should add build/install verification preset");
+  const buildInstallPreset = output.recommendations.find((entry) => entry.id === "verification-preset-build-install");
+  assert(
+    buildInstallPreset.proposedValue.commands.includes("CARGO_BUILD_JOBS=1 cargo check --no-default-features"),
+    "build/install recommendation should include constrained Rust cargo check",
+  );
 }
 
 function testManifestPresetsAndTemplates(root) {

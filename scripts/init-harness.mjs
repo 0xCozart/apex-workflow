@@ -158,6 +158,35 @@ function hasAnyPackageScript(pkg, scriptNames) {
   return scriptNames.some((scriptName) => hasPackageScript(pkg, scriptName));
 }
 
+function listRootFiles(targetRoot) {
+  try {
+    return new Set(readdirSync(targetRoot));
+  } catch {
+    return new Set();
+  }
+}
+
+function detectPackageManager(targetRoot, pkg) {
+  const declared = typeof pkg?.packageManager === "string" ? pkg.packageManager.split("@")[0] : "";
+  if (["pnpm", "yarn", "npm"].includes(declared)) return declared;
+  const files = listRootFiles(targetRoot);
+  if (files.has("pnpm-lock.yaml")) return "pnpm";
+  if (files.has("yarn.lock")) return "yarn";
+  if (files.has("package-lock.json")) return "npm";
+  return "npm";
+}
+
+function packageRunCommand(manager, scriptName) {
+  if (scriptName === "test") {
+    if (manager === "yarn") return "yarn test";
+    if (manager === "pnpm") return "pnpm test";
+    return "npm test";
+  }
+  if (manager === "yarn") return `yarn ${scriptName}`;
+  if (manager === "pnpm") return `pnpm run ${scriptName}`;
+  return `npm run ${scriptName}`;
+}
+
 function collectMarkdownFiles(targetRoot, root = targetRoot, depth = 0) {
   if (depth > 3) return [];
   const ignored = new Set([".git", ".next", "node_modules", "tmp", "dist", "build", "coverage"]);
@@ -494,19 +523,16 @@ function inferContracts(targetRoot) {
 function inferVerification(targetRoot, pkg, args) {
   const requiredCommands = splitCsv(args.required);
   const optionalCommands = splitCsv(args.optional);
+  const packageManager = detectPackageManager(targetRoot, pkg);
 
   if (requiredCommands.length === 0) {
-    if (hasPackageScript(pkg, "typecheck")) requiredCommands.push("npm run typecheck");
-    else if (hasPackageScript(pkg, "test")) requiredCommands.push("npm test");
-    else if (hasPackageScript(pkg, "lint")) requiredCommands.push("npm run lint");
+    if (hasPackageScript(pkg, "typecheck")) requiredCommands.push(packageRunCommand(packageManager, "typecheck"));
+    else if (hasPackageScript(pkg, "test")) requiredCommands.push(packageRunCommand(packageManager, "test"));
+    else if (hasPackageScript(pkg, "lint")) requiredCommands.push(packageRunCommand(packageManager, "lint"));
   }
 
-  for (const [scriptName, command] of [
-    ["test", "npm test"],
-    ["lint", "npm run lint"],
-    ["build", "npm run build"],
-    ["typecheck", "npm run typecheck"],
-  ]) {
+  for (const scriptName of ["test", "lint", "build", "typecheck"]) {
+    const command = packageRunCommand(packageManager, scriptName);
     if (hasPackageScript(pkg, scriptName) && !requiredCommands.includes(command)) {
       optionalCommands.push(command);
     }
@@ -524,7 +550,9 @@ function inferVerification(targetRoot, pkg, args) {
     focusedChecksFirst: true,
     requiredCommands,
     optionalCommands: [...new Set(optionalCommands)],
-    freshnessInputs: ["package.json", "package-lock.json"].filter((filePath) => existsSync(join(targetRoot, filePath))),
+    freshnessInputs: ["package.json", "pnpm-lock.yaml", "yarn.lock", "package-lock.json"].filter((filePath) =>
+      existsSync(join(targetRoot, filePath)),
+    ),
     envAllowlist: [],
     knownFailures: firstExisting(targetRoot, [
       "docs/runbooks/known-verification-failures.md",
@@ -1031,6 +1059,8 @@ function printInstallReport({ config, targetRoot, dryRun }) {
         .map((entry) => `${entry.id}:${entry.confidence}`)
         .join(", ")}`,
     );
+  } else {
+    console.log("- discovery: not run (pass --discover for ledger-first adaptive profile recommendations)");
   }
   console.log(`- git status: ${gitStatus.summary}`);
 

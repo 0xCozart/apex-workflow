@@ -15,6 +15,33 @@ export function readObservationRows(observationLog) {
   return { rows, invalidRows };
 }
 
+function normalizeChecks(checks) {
+  if (Array.isArray(checks)) return checks.filter((check) => check && typeof check === "object");
+  if (checks && typeof checks === "object") return [checks];
+  return [];
+}
+
+function checkDurationMs(check) {
+  if (Number.isFinite(Number(check.durationMs))) return Number(check.durationMs);
+  if (Number.isFinite(Number(check.durationSeconds))) return Number(check.durationSeconds) * 1000;
+  return 0;
+}
+
+function isExpensiveCheck(check) {
+  const command = String(check.command ?? "");
+  return (
+    checkDurationMs(check) > 120000 ||
+    /cargo check|cargo test|npm run build|pnpm run build|yarn build|go test \.\/\.\.\./.test(command)
+  );
+}
+
+function hasMissingBuildEvidence(row) {
+  if (!row.finishPacket) return true;
+  return (
+    Number(row.finishPacket.operatorQuestionsAnswered ?? 0) < Number(row.finishPacket.operatorQuestionsRequired ?? 1)
+  );
+}
+
 export function buildRecommendations(_config, observationSummary = { rows: [] }) {
   const config = _config ?? {};
   const rows = observationSummary.rows ?? [];
@@ -68,12 +95,7 @@ export function buildRecommendations(_config, observationSummary = { rows: [] })
     });
   }
 
-  const expensiveChecks = rows.filter(
-    (row) =>
-      row.checks &&
-      (Number(row.checks.durationMs ?? 0) > 120000 ||
-        /cargo check|cargo test|npm run build|go test \.\/\.\.\./.test(String(row.checks.command ?? ""))),
-  );
+  const expensiveChecks = rows.filter((row) => normalizeChecks(row.checks).some((check) => isExpensiveCheck(check)));
   if (expensiveChecks.length > 0 && config.verification?.broadChecksRunLast !== true) {
     add({
       id: "verification-broad-checks-run-last",
@@ -93,11 +115,7 @@ export function buildRecommendations(_config, observationSummary = { rows: [] })
       files.some((file) => /(^Cargo\.(toml|lock)$|^build\.rs$|^scripts\/|^\.github\/workflows\/)/.test(String(file)))
     );
   });
-  const missingBuildEvidence = buildInstallRows.filter(
-    (row) =>
-      row.finishPacket &&
-      Number(row.finishPacket.operatorQuestionsAnswered ?? 0) < Number(row.finishPacket.operatorQuestionsRequired ?? 1),
-  );
+  const missingBuildEvidence = buildInstallRows.filter((row) => hasMissingBuildEvidence(row));
   if (missingBuildEvidence.length > 0) {
     add({
       id: "slice-template-build-install",
@@ -129,7 +147,7 @@ export function buildRecommendations(_config, observationSummary = { rows: [] })
       path: "verification.presets.build_install",
       currentValue: config.verification?.presets?.build_install,
       proposedValue: {
-        commands: ["git diff --check"],
+        commands: ["git diff --check", "cargo fmt --check", "CARGO_BUILD_JOBS=1 cargo check --no-default-features"],
         requiredEvidence: [
           "installed_binary_path",
           "binary_version_output",

@@ -22,8 +22,28 @@ function packageScripts(pkg) {
   return pkg?.scripts && typeof pkg.scripts === "object" ? pkg.scripts : {};
 }
 
-function commandIfScript(pkg, scriptName, command) {
-  return packageScripts(pkg)[scriptName] ? command : null;
+function detectPackageManager(targetRoot, pkg, files = listFiles(targetRoot)) {
+  const declared = typeof pkg?.packageManager === "string" ? pkg.packageManager.split("@")[0] : "";
+  if (["pnpm", "yarn", "npm"].includes(declared)) return declared;
+  if (files.has("pnpm-lock.yaml")) return "pnpm";
+  if (files.has("yarn.lock")) return "yarn";
+  if (files.has("package-lock.json")) return "npm";
+  return "npm";
+}
+
+function packageRunCommand(manager, scriptName) {
+  if (scriptName === "test") {
+    if (manager === "yarn") return "yarn test";
+    if (manager === "pnpm") return "pnpm test";
+    return "npm test";
+  }
+  if (manager === "yarn") return `yarn ${scriptName}`;
+  if (manager === "pnpm") return `pnpm run ${scriptName}`;
+  return `npm run ${scriptName}`;
+}
+
+function commandIfScript(pkg, scriptName, manager) {
+  return packageScripts(pkg)[scriptName] ? packageRunCommand(manager, scriptName) : null;
 }
 
 function detectedEcosystems(targetRoot, pkg) {
@@ -34,20 +54,27 @@ function detectedEcosystems(targetRoot, pkg) {
       id: "rust",
       confidence: files.has("Cargo.toml") ? "high" : "medium",
       evidence: ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"].filter((name) => files.has(name)),
-      candidateChecks: ["cargo fmt --check", "cargo check", "cargo test"],
+      candidateChecks: ["git diff --check", "cargo fmt --check"],
+      presets: {
+        focused: ["git diff --check", "cargo fmt --check"],
+        rust_constrained: ["CARGO_BUILD_JOBS=1 cargo check --no-default-features"],
+        rust_broad: ["cargo check", "cargo test"],
+      },
     });
   }
   if (pkg || hasAny(files, ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "tsconfig.json"])) {
+    const packageManager = detectPackageManager(targetRoot, pkg, files);
     const checks = [
-      commandIfScript(pkg, "format:check", "npm run format:check"),
-      commandIfScript(pkg, "lint", "npm run lint"),
-      commandIfScript(pkg, "typecheck", "npm run typecheck"),
-      commandIfScript(pkg, "test", "npm test"),
-      commandIfScript(pkg, "build", "npm run build"),
+      commandIfScript(pkg, "format:check", packageManager),
+      commandIfScript(pkg, "lint", packageManager),
+      commandIfScript(pkg, "typecheck", packageManager),
+      commandIfScript(pkg, "test", packageManager),
+      commandIfScript(pkg, "build", packageManager),
     ].filter(Boolean);
     ecosystems.push({
       id: "node",
       confidence: pkg ? "high" : "medium",
+      packageManager,
       evidence: ["package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "tsconfig.json"].filter((name) =>
         files.has(name),
       ),
@@ -96,6 +123,26 @@ export function discoverRepoProfile(targetRoot, options = {}) {
     .replace(/^@/, "")
     .replace(/\//g, "-");
   const primary = ecosystems[0] ?? { id: "unknown", candidateChecks: ["git diff --check"] };
+  const focusedCommands =
+    primary.id === "rust"
+      ? ["git diff --check", "cargo fmt --check"]
+      : primary.candidateChecks.length > 0
+        ? primary.candidateChecks.slice(0, 2)
+        : ["git diff --check"];
+  const extraPresets =
+    primary.id === "rust"
+      ? {
+          rust_constrained: {
+            commands: ["CARGO_BUILD_JOBS=1 cargo check --no-default-features"],
+            broadChecksRunLast: true,
+            maxConcurrency: 1,
+          },
+          rust_broad: {
+            commands: ["cargo check", "cargo test"],
+            broadChecksRunLast: true,
+          },
+        }
+      : {};
   return {
     name,
     ecosystems,
@@ -139,12 +186,13 @@ export function discoverRepoProfile(targetRoot, options = {}) {
       },
       presets: {
         focused: {
-          commands: primary.candidateChecks.length > 0 ? primary.candidateChecks.slice(0, 2) : ["git diff --check"],
+          commands: focusedCommands,
         },
         docs_only: {
           commands: ["git diff --check"],
           skipBroadBuild: true,
         },
+        ...extraPresets,
       },
     },
   };

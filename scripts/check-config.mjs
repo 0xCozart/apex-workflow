@@ -66,6 +66,34 @@ function validateSchema(config) {
   };
 }
 
+function normalizeAdaptiveAliases(config) {
+  const normalized = JSON.parse(JSON.stringify(config));
+  const errors = [];
+
+  if (normalized.schemaVersion !== undefined) {
+    if (normalized.version !== undefined && normalized.version !== normalized.schemaVersion) {
+      errors.push("schemaVersion conflicts with version; canonical field is version");
+    } else {
+      normalized.version = normalized.schemaVersion;
+    }
+    delete normalized.schemaVersion;
+  }
+
+  if (isPlainObject(normalized.codeIntelligence) && normalized.codeIntelligence.backend !== undefined) {
+    if (
+      normalized.codeIntelligence.provider !== undefined &&
+      normalized.codeIntelligence.provider !== normalized.codeIntelligence.backend
+    ) {
+      errors.push("codeIntelligence.backend conflicts with codeIntelligence.provider; canonical field is provider");
+    } else {
+      normalized.codeIntelligence.provider = normalized.codeIntelligence.backend;
+    }
+    delete normalized.codeIntelligence.backend;
+  }
+
+  return { config: normalized, errors };
+}
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -155,14 +183,16 @@ function validateAdaptiveConfig(config, failures) {
 
   const verification = config.verification ?? {};
   const presets = verification.presets;
-  const effectivePresetNames = new Set(isPlainObject(presets) ? Object.keys(presets) : ["focused"]);
+  const normalizedPresets = isPlainObject(presets) ? { ...presets } : {};
+  if (!normalizedPresets.focused) normalizedPresets.focused = {};
+  const effectivePresetNames = new Set(Object.keys(normalizedPresets));
   if (presets !== undefined && !isPlainObject(presets)) {
     failures.push("verification.presets must be an object when present");
   }
+  if (verification.defaultPreset !== undefined && !effectivePresetNames.has(verification.defaultPreset)) {
+    failures.push("verification.defaultPreset must reference a key in normalized verification.presets");
+  }
   if (isPlainObject(presets)) {
-    if (verification.defaultPreset !== undefined && !presets[verification.defaultPreset]) {
-      failures.push("verification.defaultPreset must reference a key in verification.presets");
-    }
     for (const [name, preset] of Object.entries(presets)) {
       if (!isPlainObject(preset)) {
         failures.push(`verification.presets.${name} must be an object`);
@@ -459,13 +489,19 @@ function main() {
     process.exit(1);
   }
 
-  const { absolute, value: config } = readJson(args.config, { absolute: configPath });
-  const schema = validateSchema(config);
+  const { absolute, value: rawConfig } = readJson(args.config, { absolute: configPath });
+  const aliasResult = normalizeAdaptiveAliases(rawConfig);
+  const config = aliasResult.config;
+  const schema = aliasResult.errors.length === 0 ? validateSchema(config) : { ok: false, errors: [] };
   const repoChecks = schema.ok
     ? validateConfig(config, { target: args.target })
     : { failures: [], warnings: [], skipped: true };
+  if (aliasResult.errors.length > 0) {
+    repoChecks.failures.push(...aliasResult.errors);
+    repoChecks.skipped = false;
+  }
   const jsonResult = {
-    ok: schema.ok && repoChecks.failures.length === 0,
+    ok: schema.ok && aliasResult.errors.length === 0 && repoChecks.failures.length === 0,
     config: absolute.startsWith(process.cwd()) ? absolute.slice(process.cwd().length + 1) : absolute,
     schema,
     repoChecks: {
@@ -479,6 +515,12 @@ function main() {
   if (args.format === "json") {
     console.log(JSON.stringify(jsonResult, null, 2));
     process.exit(jsonResult.ok ? 0 : 1);
+  }
+
+  if (aliasResult.errors.length > 0) {
+    console.error("[apex-config] adaptive alias validation failed:");
+    for (const error of aliasResult.errors) console.error(`- ${error}`);
+    process.exit(1);
   }
 
   if (!schema.ok) {
