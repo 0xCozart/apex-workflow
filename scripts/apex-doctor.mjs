@@ -318,7 +318,7 @@ function checkSkillLink(checks, config, args) {
     ? resolve(process.cwd(), String(args["skill-dir"]))
     : join(process.env.CODEX_HOME ? resolve(process.env.CODEX_HOME) : join(homedir(), ".codex"), "skills");
   const linkPath = join(skillRoot, "apex-workflow");
-  const expectedSource = join(config.setup?.apexRoot ?? APEX_ROOT, "skills/apex-workflow");
+  const expectedSource = join(APEX_ROOT, "skills/apex-workflow");
 
   if (!existsSync(linkPath)) {
     add(checks, "fail", "skill symlink", `missing: ${linkPath}`);
@@ -337,8 +337,39 @@ function checkSkillLink(checks, config, args) {
   else add(checks, "fail", "skill symlink", `points to ${actual}, expected ${expected}`);
 }
 
+function checkApexRoot(checks, config) {
+  const configured = config.setup?.apexRoot;
+  if (!configured) {
+    add(checks, "warn", "setup.apexRoot", "not recorded; refresh install to record the Apex checkout path");
+    return;
+  }
+
+  const actual = realpathSync(APEX_ROOT);
+  let expected;
+  try {
+    expected = realpathSync(configured);
+  } catch {
+    add(
+      checks,
+      "fail",
+      "setup.apexRoot",
+      `profile records missing Apex checkout ${configured}; refresh the install from the current Apex checkout`,
+    );
+    return;
+  }
+  if (actual === expected) add(checks, "pass", "setup.apexRoot", configured);
+  else {
+    add(
+      checks,
+      "fail",
+      "setup.apexRoot",
+      `profile records ${expected}, but doctor is running from ${actual}; refresh the install from the current Apex checkout`,
+    );
+  }
+}
+
 function checkBaseline(checks, targetRoot) {
-  const result = spawnSync("git", ["-C", targetRoot, "status", "--short", "--", "AGENTS.md", "apex.workflow.json"], {
+  const result = spawnSync("git", ["-C", targetRoot, "status", "--short", "--", "AGENTS.md", ".gitignore"], {
     encoding: "utf8",
   });
 
@@ -348,8 +379,8 @@ function checkBaseline(checks, targetRoot) {
   }
 
   const lines = result.stdout.split("\n").filter(Boolean);
-  if (lines.length === 0) add(checks, "pass", "baseline checkpoint", "AGENTS.md and apex.workflow.json are clean");
-  else add(checks, "fail", "baseline checkpoint", `setup files are uncommitted: ${lines.join("; ")}`);
+  if (lines.length === 0) add(checks, "pass", "baseline checkpoint", "AGENTS.md and .gitignore are clean");
+  else add(checks, "warn", "baseline checkpoint", `repo setup files are uncommitted: ${lines.join("; ")}`);
 }
 
 function codebaseMapRefs(config) {
@@ -439,13 +470,15 @@ async function main() {
   const mapEvaluation = readMapEvaluation(targetRoot, config);
 
   const reviewNeeded = config.setup?.reviewNeeded ?? [];
+  const acceptedReviewNeeded = new Set(config.setup?.acceptedReviewNeeded ?? []);
   const generatedMapReviewResolved = reviewNeeded.includes(GENERATED_MAP_DRAFT_REVIEW_ITEM) && mapEvaluation?.reviewed;
   const activeReviewNeeded = generatedMapReviewResolved
     ? reviewNeeded.filter((item) => item !== GENERATED_MAP_DRAFT_REVIEW_ITEM)
     : reviewNeeded;
-  if (activeReviewNeeded.length === 0)
+  const unresolvedReviewNeeded = activeReviewNeeded.filter((item) => !acceptedReviewNeeded.has(item));
+  if (unresolvedReviewNeeded.length === 0)
     add(checks, "pass", "setup.reviewNeeded", "no unresolved installer review items");
-  else add(checks, "fail", "setup.reviewNeeded", activeReviewNeeded.join("; "));
+  else add(checks, "fail", "setup.reviewNeeded", unresolvedReviewNeeded.join("; "));
   if (generatedMapReviewResolved) {
     add(
       checks,
@@ -464,6 +497,12 @@ async function main() {
   } else {
     add(checks, "fail", "tmp/apex-workflow gitignore", "add tmp/ or tmp/apex-workflow/ to .gitignore");
   }
+  if (checkGitignored(targetRoot, "apex.workflow.json")) {
+    add(checks, "pass", "apex.workflow.json gitignore", "apex.workflow.json is ignored");
+  } else {
+    add(checks, "fail", "apex.workflow.json gitignore", "add apex.workflow.json to .gitignore");
+  }
+  checkApexRoot(checks, config);
 
   const agents = readText(join(targetRoot, "AGENTS.md"));
   if (agents.includes(START_MARKER) && agents.includes(END_MARKER)) {

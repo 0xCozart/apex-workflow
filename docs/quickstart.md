@@ -63,16 +63,16 @@ apex-map-codebase --target=. --write
 Generated maps start as `Status: draft`. Review the file and remove all `REVIEW NEEDED` markers before marking it
 reviewed.
 
-Commit the generated setup before the first slice:
+Commit the repo-facing setup before the first slice:
 
 ```bash
-git add AGENTS.md apex.workflow.json .gitignore
+git add AGENTS.md .gitignore
 git -c user.email=apex@example.local -c user.name="Apex Test" commit -m "install Apex workflow"
 ```
 
-Keep `tmp/apex-workflow/` ignored. The installer-managed `.gitignore` block treats manifests, logs, detect output, and
-observation files as local execution artifacts. Commit only the public workflow contract files above unless the target
-repo deliberately configures a reviewed evidence directory outside `tmp/`.
+Keep `apex.workflow.json` and `tmp/apex-workflow/` ignored. The installer-managed `.gitignore` block treats the profile,
+manifests, logs, detect output, and observation files as local execution artifacts. Commit only the repo-facing setup
+files above unless the target repo deliberately configures a reviewed evidence directory outside `tmp/`.
 
 ## 5. Run Doctor
 

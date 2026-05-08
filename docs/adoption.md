@@ -30,8 +30,9 @@ The installer will:
 - infer app name, docs, package scripts, contracts, browser config, and code-intelligence support
 - ask whether to auto-configure or choose options when run in an interactive terminal
 - prompt for tracker/GitNexus/browser choices only in custom mode
-- write `apex.workflow.json`
+- write local `apex.workflow.json`
 - create or update a managed Apex block in `AGENTS.md`
+- create or update a managed `.gitignore` block for Apex local workflow files
 - validate the generated profile
 - print a post-install report with inferred path confidence, adapter choices, repo dirty state, and next checkpoint
   guidance, including whether adaptive discovery was skipped
@@ -92,6 +93,8 @@ Also review:
 
 - `setup.inferredPaths`: paths marked `guessed` need human or agent confirmation before the first implementation slice.
 - `setup.reviewNeeded`: installer concerns that must be resolved or consciously accepted.
+- `setup.acceptedReviewNeeded`: exact `setup.reviewNeeded` items the operator reviewed and accepted as intentional for
+  this repo.
 - `operatorCautions`: human-readable boundaries such as security, secret-handling, or public/private repo limits. These
   are not authority paths.
 
@@ -108,6 +111,12 @@ Review `codeIntelligence.availability` separately from `provider`:
 If the installer could not infer product truth, contract docs, or broad-search orientation, it records that in
 `setup.reviewNeeded`.
 
+If a review item is intentional for the repo, accept the exact item instead of deleting it by hand:
+
+```bash
+npm run profile -- accept-review --config=apex.workflow.json --target=/path/to/app --review="<exact setup.reviewNeeded item>" --yes
+```
+
 If the installer generated a codebase map, it also records a draft-map review item in `setup.reviewNeeded`.
 `apex-map-codebase --mark-reviewed --sync-profile` removes only that generated-map item after the map is reviewed;
 unrelated setup concerns remain.
@@ -116,8 +125,8 @@ The validator checks required profile paths against the target repo and rejects 
 `docs/ARCHITECTURE.md` when the real file is `docs/architecture.md`.
 
 If the install report says
-`baseline checkpoint: commit AGENTS.md/apex.workflow.json setup before the first implementation slice`, do that before
-starting product code. Mixing harness bootstrap with implementation weakens the first manifest and finish packet.
+`baseline checkpoint: commit AGENTS.md/.gitignore setup before the first implementation slice`, do that before starting
+product code. `apex.workflow.json` and `tmp/apex-workflow/` are local workflow state and should stay ignored by default.
 
 Adaptive discovery is opt-in. For new repos, prefer discovery mode first:
 
@@ -150,9 +159,9 @@ changed-file coverage, so it is useful even without GitNexus. Reconciliation man
 `codeIntelligence.detect.externalDirtyFiles`, but they do not fail the slice when the owned-file scope is clean.
 
 By default, manifests and command logs live under ignored `tmp/apex-workflow/` local runtime state. If manifests are
-durable reviewer or grant evidence, set `manifest.defaultDir` to a committed evidence path such as `.apex/manifests`
-or `docs/proof/apex-workflow`, then review those artifacts for secrets, private paths, and local execution details
-before committing.
+durable reviewer or grant evidence, set `manifest.defaultDir` to a committed evidence path such as `.apex/manifests` or
+`docs/proof/apex-workflow`, then review those artifacts for secrets, private paths, and local execution details before
+committing.
 
 Record verification outcomes as they run:
 

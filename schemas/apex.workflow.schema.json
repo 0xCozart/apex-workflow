@@ -314,6 +314,7 @@
         "configMode": { "type": "string" },
         "reviewRequiredBeforeFirstSlice": { "type": "boolean" },
         "reviewNeeded": { "type": "array", "items": { "type": "string" } },
+        "acceptedReviewNeeded": { "type": "array", "items": { "type": "string" } },
         "inferredPaths": { "type": "object" }
       },
       "additionalProperties": true

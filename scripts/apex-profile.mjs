@@ -21,6 +21,7 @@ Usage:
   node scripts/apex-profile.mjs recommend --config=apex.workflow.json --target=/path/to/app
   node scripts/apex-profile.mjs diff --config=apex.workflow.json --target=/path/to/app --recommendations=tmp/apex-workflow/profile-recommendations.json
   node scripts/apex-profile.mjs accept --config=apex.workflow.json --target=/path/to/app --recommendations=tmp/apex-workflow/profile-recommendations.json --yes
+  node scripts/apex-profile.mjs accept-review --config=apex.workflow.json --target=/path/to/app --review="<exact setup.reviewNeeded item>" --yes
 `;
   (exitCode === 0 ? console.log : console.error)(message.trim());
   process.exit(exitCode);
@@ -199,6 +200,35 @@ function setPath(object, path, value) {
   current[segments[segments.length - 1]] = value;
 }
 
+function createProfileBackup(targetRoot, configPath) {
+  const backupDir = resolveInsideRoot(targetRoot, "tmp/apex-workflow/profile-backups", {
+    label: "profile backup directory",
+  });
+  mkdirSync(backupDir.absolute, { recursive: true });
+  const backupPath = join(
+    backupDir.absolute,
+    `apex.workflow.${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}.json`,
+  );
+  cpSync(configPath.absolute, backupPath);
+  return { backupDir, backupPath };
+}
+
+function validateProfileOrRestore(targetRoot, configPath, backupPath, failureLabel) {
+  const validation = spawnSync(
+    process.execPath,
+    [join(SCRIPT_DIR, "check-config.mjs"), `--config=${configPath.relative}`, `--target=${targetRoot}`],
+    {
+      cwd: targetRoot,
+      encoding: "utf8",
+      stdio: "pipe",
+    },
+  );
+  if (validation.status !== 0) {
+    cpSync(backupPath, configPath.absolute);
+    throw new Error(`${failureLabel} failed validation and was restored\n${validation.stdout}${validation.stderr}`);
+  }
+}
+
 function selectedRecommendations(recommendations, args) {
   const ids = selectIds(args);
   const entries = recommendations.recommendations ?? [];
@@ -231,35 +261,46 @@ function commandAccept(args, targetRoot) {
   const { config, path: configPath } = loadConfig(args, targetRoot);
   const { recommendations } = loadRecommendations(args, targetRoot);
   const selected = selectedRecommendations(recommendations, args);
-  const backupDir = resolveInsideRoot(targetRoot, "tmp/apex-workflow/profile-backups", {
-    label: "profile backup directory",
-  });
-  mkdirSync(backupDir.absolute, { recursive: true });
-  const backupPath = join(
-    backupDir.absolute,
-    `apex.workflow.${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}.json`,
-  );
-  cpSync(configPath.absolute, backupPath);
+  const { backupDir, backupPath } = createProfileBackup(targetRoot, configPath);
   for (const recommendation of selected) {
     if (!recommendation.path) throw new Error(`recommendation ${recommendation.id ?? "<unknown>"} has no path`);
     setPath(config, recommendation.path, recommendation.proposedValue);
   }
   writeFileSync(configPath.absolute, `${JSON.stringify(config, null, 2)}\n`);
-  const validation = spawnSync(
-    process.execPath,
-    [join(SCRIPT_DIR, "check-config.mjs"), `--config=${configPath.relative}`, `--target=${targetRoot}`],
-    {
-      cwd: targetRoot,
-      encoding: "utf8",
-      stdio: "pipe",
-    },
-  );
-  if (validation.status !== 0) {
-    cpSync(backupPath, configPath.absolute);
-    throw new Error(`accepted profile failed validation and was restored\n${validation.stdout}${validation.stderr}`);
-  }
+  validateProfileOrRestore(targetRoot, configPath, backupPath, "accepted profile");
   console.log("[apex-profile] accepted recommendations");
   console.log(`- applied: ${selected.length}`);
+  console.log(`- backup: ${backupDir.relative}/${backupPath.split(/[\\/]/).pop()}`);
+  console.log(`- profile: ${configPath.relative}`);
+}
+
+function commandAcceptReview(args, targetRoot) {
+  if (!args.yes) throw new Error("accept-review requires --yes");
+  const { config, path: configPath } = loadConfig(args, targetRoot);
+  const reviewNeeded = config.setup?.reviewNeeded ?? [];
+  const selected = args.all
+    ? reviewNeeded
+    : String(args.review ?? "")
+        .split("\n")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+  if (selected.length === 0) throw new Error("accept-review requires --review=<exact item> or --all");
+
+  const missing = selected.filter((item) => !reviewNeeded.includes(item));
+  if (missing.length > 0) throw new Error(`review item(s) not found in setup.reviewNeeded: ${missing.join("; ")}`);
+
+  const { backupDir, backupPath } = createProfileBackup(targetRoot, configPath);
+  config.setup = config.setup ?? {};
+  const accepted = new Set(config.setup.acceptedReviewNeeded ?? []);
+  for (const item of selected) accepted.add(item);
+  config.setup.acceptedReviewNeeded = [...accepted];
+  config.setup.reviewRequiredBeforeFirstSlice = reviewNeeded.some((item) => !accepted.has(item));
+
+  writeFileSync(configPath.absolute, `${JSON.stringify(config, null, 2)}\n`);
+  validateProfileOrRestore(targetRoot, configPath, backupPath, "accepted setup review");
+  console.log("[apex-profile] accepted setup review item(s)");
+  console.log(`- accepted: ${selected.length}`);
+  console.log(`- remaining: ${config.setup.reviewRequiredBeforeFirstSlice ? "yes" : "none"}`);
   console.log(`- backup: ${backupDir.relative}/${backupPath.split(/[\\/]/).pop()}`);
   console.log(`- profile: ${configPath.relative}`);
 }
@@ -284,6 +325,9 @@ function main() {
       break;
     case "accept":
       commandAccept(args, targetRoot);
+      break;
+    case "accept-review":
+      commandAcceptReview(args, targetRoot);
       break;
     default:
       usage(1);

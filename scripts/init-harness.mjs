@@ -623,6 +623,7 @@ async function promptText(rl, label, value, shouldPrompt) {
 async function buildConfig(targetRoot, args) {
   const pkg = readJsonIfExists(join(targetRoot, "package.json"));
   const template = readJsonIfExists(TEMPLATE_PATH);
+  const existingConfig = readJsonIfExists(join(targetRoot, "apex.workflow.json"));
   const shouldPrompt = Boolean(process.stdin.isTTY && process.stdout.isTTY && !args.yes);
   const rl = shouldPrompt ? createInterface({ input: process.stdin, output: process.stdout }) : null;
 
@@ -720,6 +721,11 @@ async function buildConfig(targetRoot, args) {
           ]
         : []),
     ];
+    const acceptedReviewNeeded = (existingConfig?.setup?.acceptedReviewNeeded ?? []).filter((item) =>
+      reviewNeeded.includes(item),
+    );
+    const acceptedReviewNeededSet = new Set(acceptedReviewNeeded);
+    const reviewRequiredBeforeFirstSlice = reviewNeeded.some((item) => !acceptedReviewNeededSet.has(item));
 
     const discovery = args.discover ? discoverRepoProfile(targetRoot, { name }) : null;
     const verification = inferVerification(targetRoot, pkg, args);
@@ -785,8 +791,9 @@ async function buildConfig(targetRoot, args) {
           : { enabled: false },
         apexRoot: APEX_ROOT,
         targetRoot,
-        reviewRequiredBeforeFirstSlice: reviewNeeded.length > 0,
+        reviewRequiredBeforeFirstSlice,
         reviewNeeded,
+        ...(acceptedReviewNeeded.length > 0 ? { acceptedReviewNeeded } : {}),
         inferredPaths: {
           authority: authorityResult.inferredPaths,
           orientation: orientationResult.inferredPaths,
@@ -846,6 +853,7 @@ function upsertAgentsBlock(targetRoot, args) {
 function makeGitignoreBlock() {
   return `${GITIGNORE_START_MARKER}
 # Apex Workflow local artifacts
+apex.workflow.json
 tmp/apex-workflow/
 tmp/agent-browser/
 ${GITIGNORE_END_MARKER}
@@ -1014,7 +1022,7 @@ function getGitStatus(targetRoot) {
     .map((line) => line.trimEnd())
     .filter(Boolean);
   const dirtyLines = lines.filter((line) => !line.startsWith("##"));
-  const bootstrapDirty = dirtyLines.some((line) => /\b(AGENTS\.md|apex\.workflow\.json)\b/.test(line));
+  const bootstrapDirty = dirtyLines.some((line) => /\b(AGENTS\.md|\.gitignore)\b/.test(line));
   const branchLine = lines.find((line) => line.startsWith("##")) ?? "## unknown";
 
   return {
@@ -1084,9 +1092,7 @@ function printInstallReport({ config, targetRoot, dryRun }) {
   }
 
   if (!dryRun && gitStatus.bootstrapDirty) {
-    console.log(
-      "- baseline checkpoint: commit AGENTS.md/apex.workflow.json setup before the first implementation slice",
-    );
+    console.log("- baseline checkpoint: commit AGENTS.md/.gitignore setup before the first implementation slice");
   } else if (!dryRun && gitStatus.dirty) {
     console.log("- baseline checkpoint: repo is dirty; separate existing changes from the first implementation slice");
   } else if (!dryRun && gitStatus.available) {

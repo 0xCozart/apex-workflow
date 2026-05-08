@@ -174,8 +174,9 @@ apex-init \
   --yes
 ```
 
-The installer writes `apex.workflow.json`, adds a managed Apex block to the target repo's `AGENTS.md`, validates the
-profile, and symlinks the `$apex-workflow` skill into the local Codex skills directory.
+The installer writes local `apex.workflow.json`, adds a managed Apex block to the target repo's `AGENTS.md`, updates a
+managed `.gitignore` block for Apex local files, validates the profile, and symlinks the `$apex-workflow` skill into the
+local Codex skills directory.
 
 It also prints an install report: inferred authority paths with confidence, adapter choices, dirty repo state, review
 items, and whether to commit the harness setup before the first implementation slice.
@@ -186,9 +187,9 @@ Before the first implementation slice, run the doctor against the target repo:
 apex-doctor --target=/path/to/app --config=apex.workflow.json
 ```
 
-The doctor checks unresolved setup review items, guessed inferred paths, whether `tmp/apex-workflow/` is ignored, the
-managed `AGENTS.md` block, adapter readiness, the local skill symlink, and whether the installed setup has a clean
-baseline checkpoint.
+The doctor checks unresolved setup review items, guessed inferred paths, whether `apex.workflow.json` and
+`tmp/apex-workflow/` are ignored, the managed `AGENTS.md` block, adapter readiness, the local skill symlink, and whether
+the repo-facing setup has a clean baseline checkpoint.
 
 ## Create A Codebase Map
 
@@ -493,6 +494,12 @@ without an explicit accept step:
 npm run profile -- recommend --config=apex.workflow.json --target=/path/to/app
 npm run profile -- diff --config=apex.workflow.json --target=/path/to/app
 npm run profile -- accept --config=apex.workflow.json --target=/path/to/app --yes
+```
+
+Installer review items can also be accepted explicitly after review, without deleting the original installer note:
+
+```bash
+npm run profile -- accept-review --config=apex.workflow.json --target=/path/to/app --review="<exact setup.reviewNeeded item>" --yes
 ```
 
 Canonical adaptive config uses `version` and `codeIntelligence.provider`. `apex-check-config` accepts the older

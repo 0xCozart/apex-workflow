@@ -141,10 +141,12 @@ function testNoAdaptersDoctor(root) {
   );
   const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
   assert(gitignore.includes("# apex-workflow:start"), "Apex .gitignore block missing");
+  assert(gitignore.includes("apex.workflow.json"), "Apex profile ignore missing");
   assert(gitignore.includes("tmp/apex-workflow/"), "Apex manifest artifact ignore missing");
   assert(gitignore.includes("tmp/agent-browser/"), "Apex browser artifact ignore missing");
 
   assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["check-ignore", "-q", "apex.workflow.json"]).status === 0, "Apex profile should be ignored");
   assert(
     git(target, ["check-ignore", "-q", "tmp/apex-workflow/fixture-slice.json"]).status === 0,
     "Apex manifest path should be ignored",
@@ -170,6 +172,33 @@ function testNoAdaptersDoctor(root) {
     doctor.stdout.includes("executable trust boundary"),
     "doctor should warn about trusted executable command configuration",
   );
+  assert(doctor.stdout.includes("apex.workflow.json gitignore"), "doctor should check ignored Apex profile");
+
+  const staleConfig = readConfig(target);
+  staleConfig.setup.apexRoot = join(root, "missing-apex-root");
+  writeFileSync(join(target, "apex.workflow.json"), `${JSON.stringify(staleConfig, null, 2)}\n`);
+  const staleDoctor = run(
+    [
+      join(APEX_ROOT, "scripts/apex-doctor.mjs"),
+      `--target=${target}`,
+      `--skill-dir=${skillDir}`,
+      "--skip-commands",
+      "--json",
+    ],
+    { allowFailure: true },
+  );
+  assert(staleDoctor.status !== 0, "doctor should fail when setup.apexRoot is stale");
+  const staleDoctorJson = JSON.parse(staleDoctor.stdout);
+  assert(
+    staleDoctorJson.blockers.some((entry) => entry.label === "setup.apexRoot"),
+    "stale setup.apexRoot should be reported as its own blocker",
+  );
+  assert(
+    !staleDoctorJson.blockers.some((entry) => entry.label === "skill symlink"),
+    "current skill symlink should not be blamed for stale profile metadata",
+  );
+  staleConfig.setup.apexRoot = APEX_ROOT;
+  writeFileSync(join(target, "apex.workflow.json"), `${JSON.stringify(staleConfig, null, 2)}\n`);
 
   run(
     [
@@ -324,6 +353,87 @@ function testStaleEvidenceDetection(root) {
   assert(
     manifest.evidence?.some((entry) => entry.kind === "stale-evidence-override"),
     "allow-stale-evidence should record an override evidence item",
+  );
+}
+
+function testAcceptSetupReview(root) {
+  const target = join(root, "accept-review-target");
+  const skillDir = join(root, "accept-review-skills");
+  mkdirSync(target, { recursive: true });
+  mkdirSync(join(target, "docs"), { recursive: true });
+  writeFileSync(join(target, "PRODUCT.md"), "# Product\n\nFixture product authority.\n");
+  writeFileSync(join(target, "README.md"), "# Accept Review Fixture\n");
+  writeFileSync(join(target, "docs/architecture.md"), "# Architecture\n");
+  writeFileSync(join(target, ".gitignore"), "tmp/\n");
+  writeFileSync(
+    join(target, "package.json"),
+    JSON.stringify({ name: "accept-review-fixture", private: true, scripts: { test: "node --version" } }, null, 2),
+  );
+
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
+  const reviewItem =
+    "No contract directories were detected. Shared-surface work will rely on source search and surrogate docs.";
+  const config = readConfig(target);
+  assert(config.setup.reviewNeeded.includes(reviewItem), "fixture should record missing contract review item");
+
+  assert(git(target, ["init"]).status === 0, "git init failed");
+  assert(git(target, ["add", "."]).status === 0, "git add failed");
+  assert(
+    git(target, ["-c", "user.email=apex@example.local", "-c", "user.name=Apex Test", "commit", "-m", "baseline"])
+      .status === 0,
+    "git commit failed",
+  );
+
+  const beforeAccept = run(
+    [
+      join(APEX_ROOT, "scripts/apex-doctor.mjs"),
+      `--target=${target}`,
+      `--skill-dir=${skillDir}`,
+      "--skip-commands",
+      "--json",
+    ],
+    { allowFailure: true },
+  );
+  assert(beforeAccept.status !== 0, "doctor should fail before accepting setup review item");
+  assert(
+    JSON.parse(beforeAccept.stdout).blockers.some((entry) => entry.label === "setup.reviewNeeded"),
+    "unaccepted setup review item should block doctor",
+  );
+
+  run([
+    join(APEX_ROOT, "scripts/apex-profile.mjs"),
+    "accept-review",
+    `--target=${target}`,
+    `--review=${reviewItem}`,
+    "--yes",
+  ]);
+
+  const afterAccept = run([
+    join(APEX_ROOT, "scripts/apex-doctor.mjs"),
+    `--target=${target}`,
+    `--skill-dir=${skillDir}`,
+    "--skip-commands",
+    "--json",
+  ]);
+  const afterAcceptJson = JSON.parse(afterAccept.stdout);
+  assert(
+    afterAcceptJson.info.some((entry) => entry.label === "setup.reviewNeeded"),
+    "accepted setup review item should let setup.reviewNeeded pass",
+  );
+  assert(readConfig(target).setup.acceptedReviewNeeded.includes(reviewItem), "accepted review item should be recorded");
+
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none", "--force"],
+    skillDir,
+  );
+  assert(
+    readConfig(target).setup.acceptedReviewNeeded.includes(reviewItem),
+    "force refresh should preserve accepted setup review items",
   );
 }
 
@@ -1075,19 +1185,6 @@ function testCommandPolicy(root) {
     blockedShellTokens: ["&&"],
   };
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-  assert(git(target, ["add", "apex.workflow.json"]).status === 0, "git add policy config failed");
-  assert(
-    git(target, [
-      "-c",
-      "user.email=apex@example.local",
-      "-c",
-      "user.name=Apex Test",
-      "commit",
-      "-m",
-      "set command policy",
-    ]).status === 0,
-    "git commit policy config failed",
-  );
   const restricted = run(
     [
       join(APEX_ROOT, "scripts/apex-manifest.mjs"),
@@ -2290,6 +2387,7 @@ function main() {
   try {
     mkdirSync(root, { recursive: true });
     fixture("no-adapters doctor", () => testNoAdaptersDoctor(root));
+    fixture("accept setup review", () => testAcceptSetupReview(root));
     fixture("stale evidence detection", () => testStaleEvidenceDetection(root));
     fixture("command preview and placeholder failure", () => testCommandPreviewAndPlaceholderFailure(root));
     fixture("reconciliation owned files only", () => testReconciliationOwnedFilesOnly(root));
