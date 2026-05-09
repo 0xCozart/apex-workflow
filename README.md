@@ -147,19 +147,8 @@ npm link
 
 First-time adopters can follow the no-service path in [docs/quickstart.md](docs/quickstart.md).
 
-Ask the agent installing Apex one setup question:
-
-```text
-Auto-configure from repo evidence, or choose tracker/GitNexus/browser options?
-```
-
-Auto mode:
-
-```bash
-apex-init --target=/path/to/app --config-mode=auto --yes
-```
-
-Custom mode:
+Agents installing Apex should inspect the target repo first, then pass explicit adapter choices. Repo evidence can help
+choose those options, but the installer no longer treats heuristic auto config as authority.
 
 ```bash
 apex-init \
@@ -180,6 +169,11 @@ local Codex skills directory.
 
 It also prints an install report: inferred authority paths with confidence, adapter choices, dirty repo state, review
 items, and whether to commit the harness setup before the first implementation slice.
+
+Before the first implementation slice, manually review and harden the generated profile against the target repo's real
+authority chain, tracker/backlog needs, verification scripts, browser smoke requirements, security boundaries, and slice
+templates. Discovery remains advisory; use `apex-profile discover` or `apex-init --discover` to collect candidate
+profile recommendations, not to replace repo-specific judgment.
 
 Before the first implementation slice, run the doctor against the target repo:
 
@@ -469,15 +463,23 @@ Apex can now inspect a target repo and produce a candidate adaptive profile:
 
 ```bash
 npm run profile -- discover --target=/path/to/app
-npm run init -- --target=/path/to/app --discover
+npm run init -- \
+  --target=/path/to/app \
+  --config-mode=custom \
+  --tracker=file \
+  --code-intelligence=focused-search \
+  --browser=none \
+  --discover \
+  --yes
 ```
 
 Discovery defaults to `operatingModel.default = ledger`, disables executor-style command driving by default, records a
 conditional manifest policy, and infers focused verification presets from repo evidence. Rust focused discovery stays
 cheap (`git diff --check`, `cargo fmt --check`); constrained or broad Cargo checks live in separate escalated presets.
-The installer does not run discovery unless `--discover` is passed, and the install report says when discovery was
-skipped. Use `npm run profile -- show --config=apex.workflow.json --target=/path/to/app` to inspect the effective
-operating model, manifest policy, code-intelligence fallback, observation log, and verification presets.
+The installer does not run discovery unless `--discover` is passed after explicit adapter choices, and the install
+report says when discovery was skipped. Use `npm run profile -- show --config=apex.workflow.json --target=/path/to/app`
+to inspect the effective operating model, manifest policy, code-intelligence fallback, observation log, and verification
+presets.
 
 Manifest creation can use explicit presets and slice templates:
 

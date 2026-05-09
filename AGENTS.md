@@ -12,15 +12,9 @@ the target repo with the harness installer.
 ## Install Flow
 
 1. Identify the target app repo path.
-2. Ask the user one setup question unless they already specified it: "Auto-configure from repo evidence, or choose
-   tracker/GitNexus/browser options?"
-3. Run:
-
-```bash
-npm run init -- --target=/path/to/app
-```
-
-Use non-interactive flags when the user already gave the choices:
+2. Inspect the target repo enough to choose tracker, GitNexus/code-intelligence, browser, verification, and profile
+   review needs from repo evidence.
+3. Run the installer with explicit choices:
 
 ```bash
 npm run init -- \
@@ -41,6 +35,9 @@ generated profile, and symlinks the local skill into the Codex skills directory 
 After the install report prints, review inferred path confidence, adapter choices, dirty repo state, and baseline
 checkpoint guidance. Confirm or correct any `setup.inferredPaths` entries marked `guessed` before starting the first
 implementation slice.
+
+Discovery is advisory only. Use `--discover` or `apex-profile discover` to collect candidate profile fields after
+explicit adapter choices are set, not as a replacement for repo-specific configuration judgment.
 
 ## Guardrails
 

@@ -121,6 +121,97 @@ function initHarness(target, args, skillDir) {
   ]);
 }
 
+function testAutoConfigRejected(root) {
+  const target = makeTarget(root, "no-adapters", "auto-config-rejected");
+  const skillDir = join(root, "skills-auto-config-rejected");
+  const autoMode = run(
+    [
+      join(APEX_ROOT, "scripts/init-harness.mjs"),
+      `--target=${target}`,
+      `--skill-dir=${skillDir}`,
+      "--config-mode=auto",
+      "--yes",
+    ],
+    { allowFailure: true },
+  );
+
+  assert(autoMode.status !== 0, "auto config should be rejected");
+  assert(
+    `${autoMode.stdout}\n${autoMode.stderr}`.includes("--config-mode=custom"),
+    "auto config rejection should tell operators to use custom/manual configuration",
+  );
+  assert(!existsSync(join(target, "apex.workflow.json")), "auto config rejection should not write a profile");
+
+  const autoCodeIntelligenceTarget = makeTarget(root, "no-adapters", "auto-code-intelligence-rejected");
+  const autoCodeIntelligence = run(
+    [
+      join(APEX_ROOT, "scripts/init-harness.mjs"),
+      `--target=${autoCodeIntelligenceTarget}`,
+      `--skill-dir=${skillDir}`,
+      "--config-mode=custom",
+      "--tracker=none",
+      "--code-intelligence=auto",
+      "--browser=none",
+      "--yes",
+    ],
+    { allowFailure: true },
+  );
+  assert(autoCodeIntelligence.status !== 0, "auto code intelligence should be rejected");
+  assert(
+    `${autoCodeIntelligence.stdout}\n${autoCodeIntelligence.stderr}`.includes("--code-intelligence=focused-search"),
+    "auto code intelligence rejection should list explicit choices",
+  );
+  assert(
+    !existsSync(join(autoCodeIntelligenceTarget, "apex.workflow.json")),
+    "auto code intelligence rejection should not write a profile",
+  );
+
+  const autoBrowserTarget = makeTarget(root, "no-adapters", "auto-browser-rejected");
+  const autoBrowser = run(
+    [
+      join(APEX_ROOT, "scripts/init-harness.mjs"),
+      `--target=${autoBrowserTarget}`,
+      `--skill-dir=${skillDir}`,
+      "--config-mode=custom",
+      "--tracker=none",
+      "--code-intelligence=focused-search",
+      "--browser=auto",
+      "--yes",
+    ],
+    { allowFailure: true },
+  );
+  assert(autoBrowser.status !== 0, "auto browser should be rejected");
+  assert(
+    `${autoBrowser.stdout}\n${autoBrowser.stderr}`.includes("--browser=none"),
+    "auto browser rejection should list explicit choices",
+  );
+  assert(
+    !existsSync(join(autoBrowserTarget, "apex.workflow.json")),
+    "auto browser rejection should not write a profile",
+  );
+
+  const missingAdaptersTarget = makeTarget(root, "no-adapters", "missing-adapters-rejected");
+  const missingAdapters = run(
+    [
+      join(APEX_ROOT, "scripts/init-harness.mjs"),
+      `--target=${missingAdaptersTarget}`,
+      `--skill-dir=${skillDir}`,
+      "--config-mode=custom",
+      "--yes",
+    ],
+    { allowFailure: true },
+  );
+  assert(missingAdapters.status !== 0, "non-interactive first install should require explicit adapter choices");
+  assert(
+    `${missingAdapters.stdout}\n${missingAdapters.stderr}`.includes("--tracker"),
+    "missing adapter rejection should list required adapter flags",
+  );
+  assert(
+    !existsSync(join(missingAdaptersTarget, "apex.workflow.json")),
+    "missing adapter rejection should not write a profile",
+  );
+}
+
 function testNoAdaptersDoctor(root) {
   const target = makeTarget(root, "no-adapters");
   const skillDir = join(root, "skills");
@@ -2386,6 +2477,7 @@ function main() {
   const root = mkdtempSync(join(APEX_ROOT, "tmp/apex-installer-fixtures-"));
   try {
     mkdirSync(root, { recursive: true });
+    fixture("auto config rejected", () => testAutoConfigRejected(root));
     fixture("no-adapters doctor", () => testNoAdaptersDoctor(root));
     fixture("accept setup review", () => testAcceptSetupReview(root));
     fixture("stale evidence detection", () => testStaleEvidenceDetection(root));

@@ -43,16 +43,7 @@ For a target app that does not have a profile yet, run:
 apex-init --target=/path/to/app
 ```
 
-For non-interactive agent installs, pass explicit adapter choices:
-
-```bash
-apex-init \
-  --target=/path/to/app \
-  --config-mode=auto \
-  --yes
-```
-
-If the user wants to choose options:
+For non-interactive agent installs, inspect the target repo and pass explicit adapter choices:
 
 ```bash
 apex-init \
@@ -66,6 +57,9 @@ apex-init \
 
 The installer writes `apex.workflow.json`, updates `AGENTS.md`, validates the profile, prints an install report, and
 links the local skill unless `--skip-skill-link` is passed.
+
+Heuristic auto config is intentionally not supported for install. Use `apex-profile discover` or `apex-init --discover`
+only for advisory candidate fields after explicit tracker, code-intelligence, and browser choices are set.
 
 If no broad-search orientation doc exists, create a draft codebase map:
 
@@ -116,8 +110,8 @@ cautions in `authority.doNotUseAsAuthority`; that field is path-like and the val
   the aliases.
 - `verification.defaultPreset` must reference a preset that exists after normalization. If it points at `build_install`,
   the profile must define `verification.presets.build_install`.
-- Adaptive discovery is opt-in during install. Use `apex-init --discover` for new repos that should collect local
-  observations and recommendations.
+- Adaptive discovery is opt-in and advisory during install. Use `apex-init --discover` only after explicit tracker,
+  code-intelligence, and browser choices are set.
 - Rust discovery keeps `focused` cheap: `git diff --check` and `cargo fmt --check`. Constrained or broad Cargo checks
   belong in explicit presets such as `rust_constrained`, `rust_broad`, or a repo-specific `build_install` preset.
 - Observation logs stay under the repo-local discovery path and are sanitized before persistence. Raw output fields are

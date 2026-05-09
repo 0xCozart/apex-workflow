@@ -28,8 +28,7 @@ apex-init \
 The installer will:
 
 - infer app name, docs, package scripts, contracts, browser config, and code-intelligence support
-- ask whether to auto-configure or choose options when run in an interactive terminal
-- prompt for tracker/GitNexus/browser choices only in custom mode
+- prompt for tracker/GitNexus/browser choices when run in an interactive terminal
 - write local `apex.workflow.json`
 - create or update a managed Apex block in `AGENTS.md`
 - create or update a managed `.gitignore` block for Apex local workflow files
@@ -37,6 +36,10 @@ The installer will:
 - print a post-install report with inferred path confidence, adapter choices, repo dirty state, and next checkpoint
   guidance, including whether adaptive discovery was skipped
 - symlink the local `apex-workflow` skill unless `--skip-skill-link` is passed
+
+Treat install-time inference as a starting point for review, not as product judgment. Before the first implementation
+slice, harden the profile against the repo's actual authority chain, tracker/backlog needs, verification scripts,
+browser smoke requirements, security boundaries, and expected slice lanes.
 
 If the target has no broad-search orientation doc, create a draft codebase map:
 
@@ -128,10 +131,17 @@ If the install report says
 `baseline checkpoint: commit AGENTS.md/.gitignore setup before the first implementation slice`, do that before starting
 product code. `apex.workflow.json` and `tmp/apex-workflow/` are local workflow state and should stay ignored by default.
 
-Adaptive discovery is opt-in. For new repos, prefer discovery mode first:
+Adaptive discovery is opt-in and advisory. Use it to collect candidate profile fields after choosing explicit adapters:
 
 ```bash
-apex-init --target=/path/to/app --discover
+apex-init \
+  --target=/path/to/app \
+  --config-mode=custom \
+  --tracker=file \
+  --code-intelligence=focused-search \
+  --browser=none \
+  --discover \
+  --yes
 apex-profile show --config=apex.workflow.json --target=/path/to/app
 ```
 

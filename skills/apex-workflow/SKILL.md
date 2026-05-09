@@ -46,14 +46,9 @@ Apex repo is available:
 apex-init --target=/path/to/app
 ```
 
-If the user did not specify setup mode, ask one question first:
-
-```text
-Auto-configure from repo evidence, or choose tracker/GitNexus/browser options?
-```
-
-If the user chooses auto, run with `--config-mode=auto --yes`. If they choose custom, collect only the adapter choices
-needed and pass them as flags with `--config-mode=custom --yes`.
+Do not use heuristic auto config as authority. Inspect the target repo enough to choose tracker, code-intelligence, and
+browser adapters manually, then pass those choices with `--config-mode=custom --yes`. Use discovery only as advisory
+profile enrichment after explicit adapter choices are set.
 
 ## Harness Installation
 
@@ -61,11 +56,12 @@ When the user asks to install Apex Workflow from a GitHub repo or local clone:
 
 1. Clone or open the Apex Workflow repo.
 2. Identify the target app repo.
-3. Run `apex-init --target=<target-app>`.
-4. Use flags for known choices:
+3. Inspect repo evidence before installing: authority/planning docs, backlog or ticket files, package scripts, browser
+   surfaces, GitNexus support, security boundaries, and likely slice lanes.
+4. Run `apex-init --target=<target-app>` with explicit adapter flags:
    - `--tracker=none|linear|github|file`
-   - `--code-intelligence=auto|focused-search|gitnexus-mcp|gitnexus-wrapper`
-   - `--browser=auto|none|agent-browser`
+   - `--code-intelligence=focused-search|gitnexus-mcp|gitnexus-wrapper`
+   - `--browser=none|agent-browser`
 5. Confirm that `apex.workflow.json` validates and that the target `AGENTS.md` has the managed Apex block.
 6. Run the readiness doctor from the target repo when available:
 
@@ -76,10 +72,12 @@ apex-doctor \
 ```
 
 7. Read the install report. Before the first implementation slice, resolve or consciously accept `setup.reviewNeeded`,
-   confirm any `setup.inferredPaths` marked `guessed`, preserve any `operatorCautions`, and note whether adaptive
-   discovery was skipped. If a setup review item is intentional for the repo, record that acceptance with
+   confirm any `setup.inferredPaths` marked `guessed`, preserve any `operatorCautions`, and harden the profile against
+   the repo's real authority chain, tracker/backlog shape, verification gates, browser smoke needs, security boundaries,
+   and expected slice templates. If a setup review item is intentional for the repo, record that acceptance with
    `apex-profile accept-review --config=apex.workflow.json --target=. --review="<exact setup.reviewNeeded item>" --yes`.
-   Discovery is opt-in; use `--discover` when a new repo should start with ledger-first adaptive recommendations.
+   Discovery is opt-in and advisory; use `--discover` when a new repo should collect ledger-first candidate
+   recommendations, not to replace manual configuration.
 8. If the installer generated a draft codebase map, review it, remove `REVIEW NEEDED` markers, then run:
 
 ```bash

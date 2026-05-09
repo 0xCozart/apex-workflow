@@ -41,13 +41,13 @@ Usage:
 Options:
   --target=<path>                 Target app repo. Defaults to current directory.
   --name=<name>                   App name for apex.workflow.json.
-  --config-mode=auto|custom       Auto-infer config or prompt for adapter choices. Defaults to auto.
-  --discover                      Add adaptive repo-profile discovery fields to the generated profile.
+  --config-mode=custom            Manual adapter configuration. Defaults to custom.
+  --discover                      Add advisory adaptive repo-profile discovery fields to the generated profile.
   --tracker=none|linear|github|file
   --tracker-team=<name>           Tracker team, for Linear-style trackers.
   --tracker-project=<name>        Tracker project or board.
-  --code-intelligence=auto|focused-search|gitnexus-mcp|gitnexus-wrapper
-  --browser=auto|none|agent-browser
+  --code-intelligence=focused-search|gitnexus-mcp|gitnexus-wrapper
+  --browser=none|agent-browser
   --origin=<url>                  Browser origin when browser provider is enabled.
   --operator-cautions=<text>      Comma-separated human cautions. Not treated as authority paths.
   --create-codebase-map           Create a draft docs/CODEBASE_MAP.md when installing.
@@ -58,7 +58,7 @@ Options:
   --force                         Overwrite existing apex.workflow.json and managed AGENTS block.
   --no-rollback                   Leave partial writes in place if install fails.
   --dry-run                       Print what would be written.
-  --yes                           Non-interactive; accept inferred/default values.
+  --yes                           Non-interactive; accept reviewed explicit values.
 `;
   (exitCode === 0 ? console.log : console.error)(message.trim());
   process.exit(exitCode);
@@ -370,7 +370,7 @@ function inferOrientation(targetRoot) {
 }
 
 function inferCodeIntelligence(targetRoot, pkg, args) {
-  const requested = String(args["code-intelligence"] ?? "auto");
+  const requested = String(args["code-intelligence"] ?? "focused-search");
   const hasGitNexus =
     requested === "gitnexus-mcp" ||
     requested === "gitnexus-wrapper" ||
@@ -396,7 +396,7 @@ function inferCodeIntelligence(targetRoot, pkg, args) {
       "If GitNexus MCP fails in this environment, add repo-local wrapper scripts around npx gitnexus or a custom wrapper and point these commands at that wrapper.",
   };
 
-  if (requested === "focused-search" || (requested === "auto" && !hasGitNexus)) {
+  if (requested === "focused-search") {
     return {
       provider: "focused-search",
       availability: {
@@ -538,7 +538,7 @@ function inferVerification(targetRoot, pkg, args) {
     }
   }
 
-  const browserProvider = String(args.browser ?? "auto");
+  const browserProvider = String(args.browser ?? "none");
   const hasAgentBrowser =
     browserProvider === "agent-browser" ||
     existsSync(join(targetRoot, "agent-browser.json")) ||
@@ -608,10 +608,18 @@ function makeTracker(args) {
 }
 
 async function promptChoice(rl, label, value, choices, shouldPrompt) {
-  if (!shouldPrompt) return value;
+  if (!shouldPrompt) {
+    if (!choices.includes(value)) {
+      throw new Error(`${label} must be one of ${choices.join(", ")}. Received: ${value}`);
+    }
+    return value;
+  }
   const answer = await rl.question(`${label} (${choices.join("/")}) [${value}]: `);
   const nextValue = answer.trim() || value;
-  return choices.includes(nextValue) ? nextValue : value;
+  if (!choices.includes(nextValue)) {
+    throw new Error(`${label} must be one of ${choices.join(", ")}. Received: ${nextValue}`);
+  }
+  return nextValue;
 }
 
 async function promptText(rl, label, value, shouldPrompt) {
@@ -628,20 +636,43 @@ async function buildConfig(targetRoot, args) {
   const rl = shouldPrompt ? createInterface({ input: process.stdin, output: process.stdout }) : null;
 
   try {
-    const configMode = await promptChoice(
-      rl,
-      "Configuration mode",
-      String(args["config-mode"] ?? "auto"),
-      ["auto", "custom"],
-      shouldPrompt,
-    );
+    const requestedConfigMode = String(args["config-mode"] ?? "custom");
+    if (requestedConfigMode === "auto") {
+      throw new Error(
+        "Auto config has been removed. Inspect the target repo and run with --config-mode=custom plus explicit tracker, code-intelligence, and browser choices.",
+      );
+    }
+    if (args["code-intelligence"] === "auto") {
+      throw new Error(
+        "Auto code intelligence has been removed. Inspect the target repo and pass --code-intelligence=focused-search, --code-intelligence=gitnexus-mcp, or --code-intelligence=gitnexus-wrapper.",
+      );
+    }
+    if (args.browser === "auto") {
+      throw new Error(
+        "Auto browser selection has been removed. Inspect the target repo and pass --browser=none or --browser=agent-browser.",
+      );
+    }
+    const missingAdapterFlags = [];
+    if (!shouldPrompt && !existingConfig) {
+      if (args.tracker === undefined) missingAdapterFlags.push("--tracker");
+      if (args["code-intelligence"] === undefined) missingAdapterFlags.push("--code-intelligence");
+      if (args.browser === undefined) missingAdapterFlags.push("--browser");
+    }
+    if (missingAdapterFlags.length > 0) {
+      throw new Error(
+        `Non-interactive first install requires explicit adapter choices: ${missingAdapterFlags.join(
+          ", ",
+        )}. Inspect the target repo and rerun with --config-mode=custom.`,
+      );
+    }
+    const configMode = await promptChoice(rl, "Configuration mode", requestedConfigMode, ["custom"], shouldPrompt);
     args["config-mode"] = configMode;
-    const promptAdapters = shouldPrompt && configMode === "custom";
+    const promptAdapters = shouldPrompt;
     const name = await promptText(rl, "App name", inferName(targetRoot, pkg, args), shouldPrompt);
     const trackerProvider = await promptChoice(
       rl,
       "Tracker provider",
-      String(args.tracker ?? "none"),
+      String(args.tracker ?? existingConfig?.tracker?.provider ?? "none"),
       ["none", "linear", "github", "file"],
       promptAdapters,
     );
@@ -662,8 +693,8 @@ async function buildConfig(targetRoot, args) {
     const codeIntelligenceProvider = await promptChoice(
       rl,
       "Code intelligence",
-      String(args["code-intelligence"] ?? "auto"),
-      ["auto", "focused-search", "gitnexus-mcp", "gitnexus-wrapper"],
+      String(args["code-intelligence"] ?? existingConfig?.codeIntelligence?.provider ?? "focused-search"),
+      ["focused-search", "gitnexus-mcp", "gitnexus-wrapper"],
       promptAdapters,
     );
     args["code-intelligence"] = codeIntelligenceProvider;
@@ -671,13 +702,18 @@ async function buildConfig(targetRoot, args) {
     const browserProvider = await promptChoice(
       rl,
       "Browser provider",
-      String(args.browser ?? "auto"),
-      ["auto", "none", "agent-browser"],
+      String(args.browser ?? existingConfig?.verification?.browser?.provider ?? "none"),
+      ["none", "agent-browser"],
       promptAdapters,
     );
     args.browser = browserProvider;
     if (browserProvider === "agent-browser") {
-      args.origin = await promptText(rl, "Browser origin", args.origin ?? "http://127.0.0.1:3000", promptAdapters);
+      args.origin = await promptText(
+        rl,
+        "Browser origin",
+        args.origin ?? existingConfig?.verification?.browser?.origin ?? "http://127.0.0.1:3000",
+        promptAdapters,
+      );
     }
 
     const authorityResult = inferAuthority(targetRoot);
@@ -1068,7 +1104,7 @@ function printInstallReport({ config, targetRoot, dryRun }) {
         .join(", ")}`,
     );
   } else {
-    console.log("- discovery: not run (pass --discover for ledger-first adaptive profile recommendations)");
+    console.log("- discovery: not run (pass --discover for advisory ledger-first profile recommendations)");
   }
   console.log(`- git status: ${gitStatus.summary}`);
 
