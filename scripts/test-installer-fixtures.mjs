@@ -121,6 +121,47 @@ function initHarness(target, args, skillDir) {
   ]);
 }
 
+function testReconciledBaseline(root) {
+  const target = makeTarget(root, "no-adapters", "reconciled-baseline");
+  const skillDir = join(root, "skills-reconciled-baseline");
+  initHarness(
+    target,
+    ["--config-mode=custom", "--tracker=none", "--code-intelligence=focused-search", "--browser=none"],
+    skillDir,
+  );
+
+  const installedSkill = readFileSync(join(skillDir, "apex-workflow/SKILL.md"), "utf8");
+  assert(
+    installedSkill.includes("## Objective Alignment Preflight") &&
+      installedSkill.includes("Keep intent alignment separate from execution harnessing."),
+    "installed skill should keep objective alignment separate from execution",
+  );
+  assert(
+    installedSkill.includes("## Execute Requests") &&
+      installedSkill.includes("The manifest is the first execution artifact."),
+    "installed skill should make the first manifest instead of stopping at planning prose for execute requests",
+  );
+
+  const packageJson = JSON.parse(readFileSync(join(APEX_ROOT, "package.json"), "utf8"));
+  const packageLock = JSON.parse(readFileSync(join(APEX_ROOT, "package-lock.json"), "utf8"));
+  assert(packageJson.bin?.["apex-profile"] === "scripts/apex-profile.mjs", "package should expose apex-profile");
+  assert(
+    packageLock.packages?.[""]?.bin?.["apex-profile"] === "scripts/apex-profile.mjs",
+    "lockfile root package should expose apex-profile",
+  );
+  assert(packageJson.devDependencies?.prettier === "3.8.3", "package should pin Prettier exactly");
+  assert(packageLock.packages?.[""]?.devDependencies?.prettier === "3.8.3", "lockfile should pin Prettier exactly");
+
+  const fastUriVersion = packageLock.packages?.["node_modules/fast-uri"]?.version;
+  const [major, minor, patch] = String(fastUriVersion)
+    .split(".")
+    .map((part) => Number.parseInt(part, 10));
+  assert(
+    major > 3 || (major === 3 && (minor > 1 || (minor === 1 && patch > 4))),
+    `lockfile should resolve fast-uri above 3.1.4, got ${fastUriVersion ?? "missing"}`,
+  );
+}
+
 function testAutoConfigRejected(root) {
   const target = makeTarget(root, "no-adapters", "auto-config-rejected");
   const skillDir = join(root, "skills-auto-config-rejected");
@@ -2477,6 +2518,7 @@ function main() {
   const root = mkdtempSync(join(APEX_ROOT, "tmp/apex-installer-fixtures-"));
   try {
     mkdirSync(root, { recursive: true });
+    fixture("reconciled baseline", () => testReconciledBaseline(root));
     fixture("auto config rejected", () => testAutoConfigRejected(root));
     fixture("no-adapters doctor", () => testNoAdaptersDoctor(root));
     fixture("accept setup review", () => testAcceptSetupReview(root));

@@ -93,6 +93,45 @@ target repo. `apex.workflow.json`, slice manifests, detect outputs, observation 
 browser artifacts are local workflow state and should be ignored by default. `AGENTS.md` may still be a real repo
 instruction file; do not globally ignore it unless the target repo intentionally treats it as local-only.
 
+## Objective Alignment Preflight
+
+Keep intent alignment separate from execution harnessing.
+
+If the user's request is fuzzy, high-level, emotional, or under-specified, use `$objective-alignment-flow` before Apex
+mode selection. Examples include "make this production ready", "fix this", "improve the UI", "red team this", "write an
+agent prompt", "analyze launch blockers", or "make this good".
+
+The alignment pass should produce one or more of:
+
+- objective contract
+- repo term normalization
+- repo reality check
+- local PRD/spec
+- vertical work packets
+- implementation prompt
+- Apex planning handoff
+- explicit decision to execute now
+
+Only start `$apex-workflow` after the objective and acceptance criteria are clear enough to choose a mode. Keep the
+boundary strict:
+
+- Chat-only alignment or prompt-generation: stop after `$objective-alignment-flow`; do not invoke Apex and do not create
+  an Apex manifest.
+- Durable planning/scoping: use Apex `planning` mode after alignment when the target repo has an Apex profile and the
+  user wants profile-backed scoping, authority-doc routing, verification presets, or durable local plan artifacts. Do
+  not implement code.
+- Execution: use Apex code-facing modes only after the aligned objective has acceptance criteria and an implementation
+  decision.
+
+Planning mode can help scope plans without making `$objective-alignment-flow` Apex-specific. Treat the objective
+contract as input, then use the repo profile to refine authority docs, local record expectations, likely slice modes,
+no-touch surfaces, and verification. Do not create an execution manifest for planning-only work unless the profile
+explicitly requires a planning artifact or the user asks to start implementation.
+
+When the target profile uses `tracker=none`, keep all PRDs/specs, work packets, manifests, and handoffs local. Do not
+create or update GitHub Issues, Linear, Jira, or another external tracker unless the user explicitly asks in the current
+turn.
+
 ## Mode Selection
 
 Choose one mode from the profile before implementation.
@@ -117,11 +156,40 @@ Default mode meanings:
 - `route-local`: one owner with obvious callers
 - `shared-surface`: shared shell/store/hook/auth/profile/workspace or multi-route coupling
 - `issue-resume`: named tracker issue or dirty multi-slice continuation
-- `planning`: product/design/architecture decision before code
+- `planning`: profile-backed product/design/architecture scoping before code; no implementation and no execution
+  manifest unless the profile explicitly requires a planning artifact
 - `reconciliation`: implementation appears done; remaining work is tracker, review, audit, or wait state
 
 Downshift aggressively. Use the lightest mode that still preserves ownership, contracts, impact, tracker disposition,
 verification, and finish evidence.
+
+## Execute Requests
+
+When the user asks to `execute`, `run`, `implement`, or otherwise start a named phase, issue, plan step, or slice, treat
+it as a code-facing execution request unless the wording is explicitly review-only or planning-only. Do not stop after
+saying a manifest is needed. The manifest is the first execution artifact.
+
+Follow this sequence before editing code:
+
+1. Resolve the named phase/slice from the profile's authority and execution-truth docs.
+2. Select the lightest safe mode from the profile. Use `issue-resume` for dirty multi-slice continuation and
+   `shared-surface` for shell/store/hook/auth/profile/workspace or multi-route coupling.
+3. Create or update the slice manifest with `apex-manifest new` before implementation.
+4. Populate or immediately amend the manifest with:
+   - owned files for the current slice, including route/shell wiring files needed to expose new feature modules
+   - no-touch files and known external dirty state
+   - contracts read or explicitly pending
+   - required checks, skipped checks, and known baseline failures
+   - code-intelligence targets and expected browser/manual evidence
+5. Run `apex-manifest detect` before implementation. If the worktree is dirty, do not abort merely because dirty files
+   exist; either include intended current-slice files as owned, record unrelated dirty files as no-touch/external state
+   when the mode permits it, or stop only when ownership cannot be made truthful.
+6. Read the applicable contracts and code-intelligence evidence, then implement the first safe slice.
+7. Record verification and any requested hardening/review evidence in the manifest before closing or handing off.
+
+`ledger` mode still executes this sequence. It means the agent implements directly while Apex records scope, checks,
+detect results, and finish evidence. `executor` means stronger Apex-driven execution is enabled by the repo profile; it
+does not replace the manifest requirement.
 
 ## Required Manifest
 
@@ -180,7 +248,8 @@ continue to fail on unowned dirty files unless the manifest explicitly chooses t
   confirm callers with source search when useful.
 - `shared-surface`: use the profile's contract routing and code-intelligence gates before editing.
 - `issue-resume`: inspect latest tracker/plan/diff state, preserve no-touch surfaces, and verify the first real gap.
-- `planning`: use product authority and write durable plan artifacts only when the decision must survive sessions.
+- `planning`: start from the objective contract, use product authority/profile routing to refine scope, and write
+  durable plan artifacts only when the decision must survive sessions. Do not implement code.
 - `reconciliation`: update tracker/audit/review state without reopening code flow.
 
 ## Adapters
